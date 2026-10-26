@@ -35,7 +35,8 @@ const positiveInt = (raw: string | undefined, name: string, fallback: number): n
  */
 export function loadServerConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   const brain = loadBrainConfig(env);
-  const port = positiveInt(env.BRAIN_PORT, 'BRAIN_PORT', 8270);
+  // 0 asks the system for any free port; the listening log line names the one it got.
+  const port = env.BRAIN_PORT?.trim() === '0' ? 0 : positiveInt(env.BRAIN_PORT, 'BRAIN_PORT', 8270);
   if (port > 65_535) {
     throw new Error('BRAIN_PORT must be a port number');
   }

@@ -35,7 +35,7 @@
     "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "test:e2e": "npm run build && vitest run --config vitest.e2e.config.ts",
     "test:all": "npm run test && npm run test:e2e",
     "start": "node dist/cli.js serve",
     "prepare": "npm run build"

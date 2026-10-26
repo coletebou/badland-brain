@@ -22,6 +22,7 @@ describe('loadServerConfig', () => {
     expect(config).toMatchObject({ host: '0.0.0.0', port: 9000, mongoUri: 'mongodb://db:27017/b', keysFile: '/run/keys.json', inlineKeys: '[]', rateLimitPerMinute: 10, writeRateLimitPerMinute: 2, logLevel: 'warn' });
     expect(config.agentQuota).toEqual({ maxEntries: 500, maxBytes: Number.MAX_SAFE_INTEGER });
     expect(() => loadServerConfig({ BRAIN_PORT: '70000' })).toThrow('BRAIN_PORT must be a port number');
+    expect(loadServerConfig({ BRAIN_PORT: '0' }).port).toBe(0);
     expect(() => loadServerConfig({ BRAIN_RATE_LIMIT_PER_MINUTE: 'lots' })).toThrow('BRAIN_RATE_LIMIT_PER_MINUTE must be a positive integer');
     expect(loadServerConfig({ BRAIN_LOG_LEVEL: 'chatty' }).logLevel).toBe('info');
   });
