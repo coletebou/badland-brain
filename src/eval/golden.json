@@ -1,0 +1,18 @@
+{
+  "abstainThreshold": 0.35,
+  "questions": [
+    { "id": "r01", "question": "which port does the docs preview server listen on", "kind": "recall", "expectSlugPrefixes": ["ports-docs-preview"], "forbidSlugPrefixes": [] },
+    { "id": "r02", "question": "should I use npm install in the api package", "kind": "recall", "expectSlugPrefixes": ["pnpm-not-npm"], "forbidSlugPrefixes": [] },
+    { "id": "r03", "question": "how many attempts do webhook deliveries get before the dead-letter queue", "kind": "recall", "expectSlugPrefixes": ["webhook-retry-budget"], "forbidSlugPrefixes": [] },
+    { "id": "r04", "question": "does the certificate renewal hook restart nginx", "kind": "recall", "expectSlugPrefixes": ["cert-renewal"], "forbidSlugPrefixes": [] },
+    { "id": "r05", "question": "what port is the self-hosted analytics on", "kind": "recall", "expectSlugPrefixes": ["analytics-port"], "forbidSlugPrefixes": [] },
+    { "id": "r06", "question": "how many worker containers can I restart at once", "kind": "recall", "expectSlugPrefixes": ["restart-batches"], "forbidSlugPrefixes": [] },
+    { "id": "r07", "question": "where must persistent state live after a release", "kind": "recall", "expectSlugPrefixes": ["state-under-var-lib"], "forbidSlugPrefixes": [] },
+    { "id": "r08", "question": "thumbnail queue worker concurrency limit", "kind": "recall", "expectSlugPrefixes": ["thumbnail-worker"], "forbidSlugPrefixes": [] },
+    { "id": "r09", "question": "which flag gates the new search UI", "kind": "recall", "expectSlugPrefixes": ["beta-search-flag"], "forbidSlugPrefixes": [] },
+    { "id": "a01", "question": "what is the capital of Mongolia", "kind": "abstain", "expectSlugPrefixes": [], "forbidSlugPrefixes": [] },
+    { "id": "a02", "question": "quarterly revenue of the sunglasses store in 2031", "kind": "abstain", "expectSlugPrefixes": [], "forbidSlugPrefixes": [] },
+    { "id": "v01", "question": "is the payments provider cutover applied", "kind": "revoked", "expectSlugPrefixes": ["cutover-v2"], "forbidSlugPrefixes": ["cutover-v1"] },
+    { "id": "v02", "question": "which port is the search service API on", "kind": "revoked", "expectSlugPrefixes": ["search-port-v2"], "forbidSlugPrefixes": ["search-port-v1"] }
+  ]
+}

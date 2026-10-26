@@ -1,0 +1,24 @@
+{
+  "notes": [
+    { "slug": "ports-docs-preview", "title": "Docs preview ports", "kind": "reference", "body": "The docs preview server listens on 127.0.0.1:4310 behind the dev proxy on 4311. Loopback only; the proxy adds the auth header.", "tags": ["docs", "ports"] },
+    { "slug": "pnpm-not-npm", "title": "Package manager", "kind": "memory", "body": "Use pnpm for this monorepo; never run npm install inside packages/api. pnpm install --frozen-lockfile is what CI runs.", "tags": ["tooling"] },
+    { "slug": "webhook-retry-budget", "title": "Webhook retry budget", "kind": "decision", "body": "Webhook deliveries retry with exponential backoff for up to six attempts; after the sixth failure the event moves to the dead-letter queue.", "tags": ["webhooks"] },
+    { "slug": "cert-renewal", "title": "Certificate renewal", "kind": "memory", "body": "Certificates renew through the ACME client every 60 days. The renewal hook reloads nginx; it must never restart nginx.", "tags": ["tls"] },
+    { "slug": "beta-search-flag", "title": "Search UI flag", "kind": "reference", "body": "Feature flags live in flags.yaml. The beta-search flag gates the new search UI for staff accounts only.", "tags": ["flags"] },
+    { "slug": "thumbnail-worker", "title": "Thumbnail worker concurrency", "kind": "reference", "body": "The thumbnail queue worker runs with concurrency 4; raising it past 8 exhausts the image service's connection pool.", "tags": ["queues"] },
+    { "slug": "analytics-port", "title": "Analytics host port", "kind": "reference", "body": "Self-hosted analytics runs on port 8123, not 8080 or 8000. Query it with the read-only reporting user.", "tags": ["analytics"] },
+    { "slug": "state-under-var-lib", "title": "Deploys replace the tree", "kind": "decision", "body": "Every release replaces the whole /srv/app tree, so persistent state must live under /var/lib/app.", "tags": ["deploy"] },
+    { "slug": "restart-batches", "title": "Container restart batches", "kind": "memory", "body": "Restart worker containers in batches of three with 90-second gaps; never restart the whole pool at once.", "tags": ["operations"] },
+    { "slug": "embedding-dims", "title": "Embedding dimensions", "kind": "decision", "body": "The brain embeds every chunk at 1536 dimensions, so vectors written by every importer stay comparable.", "tags": ["brain"] },
+    { "slug": "database-backups", "title": "Database backups", "kind": "reference", "body": "The primary database has point-in-time recovery; a nightly logical dump runs at 03:00 with seven-day retention.", "tags": ["backups"] },
+    { "slug": "brand-colors", "title": "Brand colors", "kind": "reference", "body": "The marketing site uses teal #1F8A8A on a warm sand background, and never pure black text.", "tags": ["brand"] },
+    { "slug": "cutover-v1", "title": "Payments cutover state (old)", "kind": "decision", "body": "The cutover to the new payments provider is not yet applied; the canary store passed its readiness check in PR 214.", "tags": ["payments"], "supersededBy": "cutover-v2" },
+    { "slug": "cutover-v2", "title": "Payments cutover state", "kind": "decision", "body": "The payments provider cutover was applied on 2026-09-21 at 04:37 UTC; the canary store is proven end to end on the new provider.", "tags": ["payments"] },
+    { "slug": "search-port-v1", "title": "Search service port (old)", "kind": "reference", "body": "The search service API is reachable on port 7700.", "tags": ["search"], "supersededBy": "search-port-v2" },
+    { "slug": "search-port-v2", "title": "Search service port", "kind": "reference", "body": "The search service API moved to port 7702 under the search-svc account; port 7700 is deprecated.", "tags": ["search"] },
+    { "slug": "off-topic-recipe", "title": "Sourdough schedule", "kind": "doc", "body": "Feed the starter twice a day at 78F; bulk ferment four hours; bake at 475F in a dutch oven.", "tags": ["cooking"] },
+    { "slug": "off-topic-run", "title": "Tempo run plan", "kind": "doc", "body": "Tuesday tempo: 2 miles easy, 4 miles at threshold, 1 mile cooldown. Long run Sunday.", "tags": ["running"] },
+    { "slug": "off-topic-garden", "title": "Tomato staking", "kind": "doc", "body": "Stake indeterminate tomatoes at transplant; prune suckers below the first flower cluster.", "tags": ["garden"] },
+    { "slug": "disk-full-shell", "title": "A full disk breaks the shell tool", "kind": "memory", "body": "A full disk makes the shell tool's output file fail with ENOSPC; check df before installing dependencies.", "tags": ["workstation"] }
+  ]
+}
