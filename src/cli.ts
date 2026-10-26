@@ -216,7 +216,7 @@ async function evalCommand(args: string[]): Promise<void> {
     return;
   }
   const result = values.live ? await runLiveEval({ mongoUri: config.mongoUri, config: config.brain }) : await runOfflineEval(config.mongoUri);
-  print(renderTable(result.outcomes, result.summary));
+  print(`${renderTable(result.outcomes, result.summary)}\n${result.mode} eval · model ${result.model} · abstain below similarity ${result.abstainThreshold}`);
   if (values.out) {
     writeFileSync(values.out, `${JSON.stringify(result, null, 2)}\n`);
     process.stderr.write(`wrote ${values.out}\n`);

@@ -24,14 +24,18 @@ import goldenFile from './golden.json' with { type: 'json' };
 import { type EvalSummary, type GoldenQuestion, type QuestionOutcome, scoreQuestion, summarize } from './score.js';
 
 export interface Fixture { slug: string; title: string; kind: BrainKind; body: string; tags: string[]; supersededBy?: string }
-interface Golden { abstainThreshold: number; questions: GoldenQuestion[] }
+/** Similarity below which a hit with no keyword evidence counts as noise; it depends on the embedding model. */
+interface Golden { abstainThreshold: Record<string, number>; questions: GoldenQuestion[] }
 
 export const FIXTURES = fixturesFile.notes as Fixture[];
 export const GOLDEN = goldenFile as Golden;
 export const EVAL_SOURCE = 'eval';
 const TEMP_DB_PREFIX = 'badland-brain-eval-';
 
-export interface EvalResult { mode: 'offline' | 'live'; summary: EvalSummary; outcomes: QuestionOutcome[] }
+export interface EvalResult { mode: 'offline' | 'live'; model: string; abstainThreshold: number; summary: EvalSummary; outcomes: QuestionOutcome[] }
+
+/** The abstain threshold for an embedding model: its own entry, else the default. */
+export const abstainThresholdFor = (model: string): number => GOLDEN.abstainThreshold[model] ?? GOLDEN.abstainThreshold.default;
 
 async function seedFixtures(store: BrainStore): Promise<Map<string, string>> {
   const actor = { agent: 'eval', originClass: 'agent' as const };
@@ -75,11 +79,12 @@ async function resolveFixtureSlugs(): Promise<Map<string, string>> {
 }
 
 async function ask(deps: SearchDeps, slugMap: Map<string, string>): Promise<QuestionOutcome[]> {
+  const threshold = abstainThresholdFor(deps.embedder.model);
   const remap = (prefixes: string[]): string[] => prefixes.map((p) => slugMap.get(p) ?? p);
   const outcomes: QuestionOutcome[] = [];
   for (const question of GOLDEN.questions) {
     const hits = await searchBrain(deps, 'eval', { query: question.question, kinds: question.kinds, topK: 5, includeSuperseded: false });
-    outcomes.push(scoreQuestion({ ...question, expectSlugPrefixes: remap(question.expectSlugPrefixes), forbidSlugPrefixes: remap(question.forbidSlugPrefixes) }, hits, GOLDEN.abstainThreshold));
+    outcomes.push(scoreQuestion({ ...question, expectSlugPrefixes: remap(question.expectSlugPrefixes), forbidSlugPrefixes: remap(question.forbidSlugPrefixes) }, hits, threshold));
   }
   return outcomes;
 }
@@ -95,7 +100,7 @@ export async function runOfflineEval(mongoUri: string): Promise<EvalResult> {
     await BrainEntry.init();
     const slugMap = await seedFixtures(new BrainStore({ index, embedder, config }));
     const outcomes = await ask({ index, embedder, config, recordRecall: false }, slugMap);
-    return { mode: 'offline', summary: summarize(outcomes), outcomes };
+    return { mode: 'offline', model: embedder.model, abstainThreshold: abstainThresholdFor(embedder.model), summary: summarize(outcomes), outcomes };
   } finally {
     index.close();
     // Only ever the database this run created.
@@ -117,7 +122,7 @@ export async function runLiveEval(options: { mongoUri: string; config: BrainConf
     }
     const slugMap = await resolveFixtureSlugs();
     const outcomes = await ask({ index, embedder, config: options.config, recordRecall: false }, slugMap);
-    return { mode: 'live', summary: summarize(outcomes), outcomes };
+    return { mode: 'live', model: embedder.model, abstainThreshold: abstainThresholdFor(embedder.model), summary: summarize(outcomes), outcomes };
   } finally {
     if (!options.index) {
       index.close();

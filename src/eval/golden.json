@@ -1,5 +1,5 @@
 {
-  "abstainThreshold": 0.35,
+  "abstainThreshold": { "default": 0.5, "fake": 0.35, "gemini-embedding-2": 0.65 },
   "questions": [
     { "id": "r01", "question": "which port does the docs preview server listen on", "kind": "recall", "expectSlugPrefixes": ["ports-docs-preview"], "forbidSlugPrefixes": [] },
     { "id": "r02", "question": "should I use npm install in the api package", "kind": "recall", "expectSlugPrefixes": ["pnpm-not-npm"], "forbidSlugPrefixes": [] },
