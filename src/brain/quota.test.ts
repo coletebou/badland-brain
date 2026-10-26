@@ -29,7 +29,7 @@ describe('agent write quota', () => {
     await expect(limited.note(agent, { title: 'Three', body: 'over the entry cap', kind: 'memory' })).rejects.toBeInstanceOf(BrainInputError);
     expect((await limited.note(owner, { title: 'Owner', body: 'owner writes are not metered', kind: 'memory' })).created).toBe(true);
     await store.forget(agent, { slug: first.entry.slug }, 'forgetting frees nothing');
-    await expect(limited.note(agent, { title: 'Still full', body: 'history still counts', kind: 'memory' })).rejects.toThrow(/storage is full/u);
+    await expect(limited.note(agent, { title: 'Still full', body: 'history still counts', kind: 'memory' })).rejects.toThrow(/allows agents is full/u);
   });
 
   it('bounds bytes as well as entries', async () => {
