@@ -31,5 +31,27 @@ export function createLogger(level: LogLevel = 'info', write: (line: string) => 
 /** A logger that drops everything, for tests and library use. */
 export const silentLogger: Logger = createLogger('silent');
 
-/** A short, single-line reason from any thrown value. */
-export const reasonOf = (error: unknown): string => String((error as Error)?.message ?? error).replace(/\s+/gu, ' ').slice(0, 200);
+const MAX_REASON_CHARS = 200;
+const fieldsOf = (value: unknown): string => (value && typeof value === 'object' ? Object.keys(value).join(', ') : '');
+
+/**
+ * A short, single-line reason from any thrown value, safe to log. MongoDB duplicate-key errors and Mongoose validation
+ * and cast errors quote the offending values (a slug, an import id, a title) in their messages, so for those only the
+ * field names are kept.
+ */
+export function reasonOf(error: unknown): string {
+  const known = error as { code?: unknown; name?: unknown; keyPattern?: unknown; errors?: unknown; path?: unknown } | null | undefined;
+  let reason: string;
+  if (known?.code === 11000) {
+    const fields = fieldsOf(known.keyPattern);
+    reason = fields ? `duplicate key on ${fields}` : 'duplicate key';
+  } else if (known?.name === 'ValidationError') {
+    const fields = fieldsOf(known.errors);
+    reason = fields ? `validation failed on ${fields}` : 'validation failed';
+  } else if (known?.name === 'CastError') {
+    reason = typeof known.path === 'string' ? `cast failed on ${known.path}` : 'cast failed';
+  } else {
+    reason = String((error as Error | null | undefined)?.message ?? error);
+  }
+  return reason.replace(/\s+/gu, ' ').slice(0, MAX_REASON_CHARS);
+}

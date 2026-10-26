@@ -2,10 +2,14 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { createFakeEmbedder } from '../brain/embeddings/index.js';
 import { openBrainIndex } from '../brain/index/sqlite.js';
+import { BrainEntry } from '../brain/model.js';
 import { BrainStore } from '../brain/store.js';
+import { createLogger } from '../log.js';
 import { testConfig, testIdentity } from '../test-support/brain.js';
 import { clearTestDb, setupTestDb, teardownTestDb } from '../test-support/mongo.js';
-import { type ToolCtx, type ToolDeps, actorOf, brainContext, brainForget, brainGet, brainList, brainNote, brainSearch, brainSupersede } from './handlers.js';
+import {
+  type ToolCtx, type ToolDeps, actorOf, brainContext, brainForget, brainGet, brainList, brainNote, brainSearch, brainSupersede, guard,
+} from './handlers.js';
 import { brainForgetSchema, brainNoteSchema } from './schemas.js';
 
 const config = testConfig();
@@ -40,6 +44,21 @@ describe('brain tool handlers', () => {
     expect(conflict).toMatchObject({ ok: false, code: 'conflict', currentHash: note.data.entry.contentHash });
     if (!conflict.ok) { expect(conflict.error).toContain(note.data.entry.contentHash); }
     expect(await brainNote(deps)(ctx, { title: 'S', body: `bbk_${'a'.repeat(43)}`, kind: 'memory' })).toMatchObject({ ok: false, code: 'bad_input' });
+  });
+
+  it('logs an unexpected database error by its field names, never the value it quotes', async () => {
+    const lines: string[] = [];
+    const logger = createLogger('error', (line) => lines.push(line));
+    const fields = {
+      slug: 'duplicated-slug-value-1a2b3c', title: 'Twin', kind: 'memory', tier: 'episodic', namespace: 'shared', originClass: 'agent',
+      authorAgent: 'test', importance: 5, validFrom: new Date(),
+    } as const;
+    await BrainEntry.create({ ...fields, body: 'first', contentHash: 'a'.repeat(64) });
+    const result = await guard('brain_note', () => BrainEntry.create({ ...fields, body: 'second', contentHash: 'b'.repeat(64) }), logger);
+    expect(result).toEqual({ ok: false, code: 'unavailable', error: 'The brain is temporarily unavailable.' });
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0])).toMatchObject({ msg: 'brain tool failed', tool: 'brain_note', reason: 'duplicate key on slug' });
+    expect(lines[0]).not.toContain('duplicated-slug-value');
   });
 
   it('search finds notes and forget removes one entry by its exact import identity, never a whole source', async () => {

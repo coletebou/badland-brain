@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 
+import { reasonOf } from '../log.js';
 import { BRAIN_SCOPE_OF_KIND, type BrainConfig } from './config.js';
 import type { Embedder } from './embeddings/index.js';
 import { buildFtsQuery } from './index/fts-query.js';
@@ -136,7 +137,7 @@ export async function searchBrain(deps: SearchDeps, agent: string, input: Search
       : deps.embedder.embedQuery(deps.embedder.queryInput(input.query))
         .then((vector) => index.knn(vector, filter, config.candidatesPerLeg))
         .catch((error: unknown) => {
-          deps.warn?.('brain vector leg unavailable; serving keyword results only', { reason: String((error as Error).message ?? error).slice(0, 200) });
+          deps.warn?.('brain vector leg unavailable; serving keyword results only', { reason: reasonOf(error) });
           return [];
         });
     const [vecHits, textHits] = await Promise.all([vectorLeg, Promise.resolve(ftsQuery ? index.fts(ftsQuery, filter, config.candidatesPerLeg) : [])]);
