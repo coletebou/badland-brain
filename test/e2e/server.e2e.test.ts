@@ -2,6 +2,7 @@ import type { ChildProcess } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { MongoMemoryServer } from 'mongodb-memory-server';
@@ -174,6 +175,29 @@ describe('badland-brain end to end: the built server, a real MongoDB, MCP client
     const retired = await owner(['forget-source', 'claude-memory', '--reason', 'e2e cleanup']);
     expect(JSON.parse(retired.stdout)).toEqual({ forgotten: 1 });
     expect((await tool<{ hits: Hit[] }>(clients.agent, 'brain_search', { query: 'thumbnail queue concurrency' })).hits.map((h) => h.slug)).not.toContain(hits[0].slug);
+  });
+
+  it('serves the Drover plugin: status, note, search kind brain, get, supersede and brain.call against the real server', async () => {
+    const root = fileURLToPath(new URL('../../', import.meta.url));
+    const brainModule = await import(pathToFileURL(join(root, 'integrations/drover/brain.js')).href);
+    const plugin = (await import(pathToFileURL(join(root, 'integrations/drover/plugin.js')).href)).default;
+    brainModule._deps.env = { BRAIN_URL: server.url, BRAIN_KEY: keys.agent };
+    brainModule.resetSession();
+    const status = await plugin.ops['brain.status']();
+    expect(status).toMatchObject({ keyConfigured: true, write: true, session: 'none (stateless server)', health: { ok: true, model: 'fake' } });
+    const note = await plugin.ops['brain.note']({ title: 'Drover handoff', body: 'Saved through the Drover plugin: the nightly job moved to 02:00.', kind: 'handoff', actor: 'mcp' });
+    expect(note).toMatchObject({ created: true, entry: { authorAgent: 'codex@e2e' } });
+    const found = await plugin.search.remote.brain({ query: 'nightly job moved', limit: 3 });
+    expect(found.hits[0]).toMatchObject({ slug: note.entry.slug, role: 'handoff', author: 'codex@e2e' });
+    const read = await plugin.ops['brain.get']({ slug: note.entry.slug });
+    const next = await plugin.ops['brain.supersede']({ slug: note.entry.slug, body: 'The nightly job moved to 03:00.', reason: 'moved again', expectedHash: read.contentHash, actor: 'mcp' });
+    expect(next.slug).not.toBe(note.entry.slug);
+    expect((await plugin.ops['brain.call']({ tool: 'brain_list', args: { kind: 'handoff', current: true } })).items.map((i: { slug: string }) => i.slug)).toContain(next.slug);
+    await expect(plugin.ops['brain.call']({ tool: 'brain_forget', args: { slug: next.slug, reason: 'x' } })).rejects.toThrow(/not read-only/u);
+    brainModule._deps.env = { BRAIN_URL: server.url, BRAIN_KEY: keys.reader };
+    expect((await plugin.ops['brain.status']()).write).toBe(false);
+    brainModule._deps.env = process.env;
+    brainModule.resetSession();
   });
 
   it('keeps secrets out: a secret-shaped note or query is refused by name, and nothing reaches the log', async () => {
