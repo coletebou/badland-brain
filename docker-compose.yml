@@ -1,0 +1,36 @@
+# MongoDB plus the brain. Mint keys with:
+#   docker compose run --rm brain keys mint --name owner --role owner
+#   docker compose run --rm brain keys mint --name claude-code --role agent
+# The brain is published on loopback only; put a TLS proxy in front of it to reach it from other machines.
+services:
+  mongo:
+    image: mongo:8
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  brain:
+    build: .
+    image: badland-brain:local
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      BRAIN_MONGODB_URI: mongodb://mongo:27017/badland-brain
+    ports:
+      - "127.0.0.1:8270:8270"
+    volumes:
+      - brain-data:/data
+
+volumes:
+  mongo-data:
+  brain-data:

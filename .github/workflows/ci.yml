@@ -1,0 +1,76 @@
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to a branch cancels its older runs; every master run finishes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+
+jobs:
+  test:
+    name: test (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - name: Cache the test MongoDB binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/mongodb-binaries
+          key: mongodb-binaries-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - name: Install
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm test
+      - name: End-to-end tests (built server, real MongoDB, MCP clients)
+        run: npm run test:e2e
+      - name: CLI smoke
+        run: |
+          node dist/cli.js --version
+          node dist/cli.js --help > /dev/null
+          BRAIN_DATA_DIR="${{ runner.temp }}/brain" node dist/cli.js keys mint --name ci --role read > /dev/null
+          BRAIN_DATA_DIR="${{ runner.temp }}/brain" node dist/cli.js keys list
+      - name: Package contents
+        run: npm pack --dry-run
+
+  docker:
+    name: docker image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: docker build -t badland-brain:ci .
+      - name: Smoke
+        run: |
+          docker run --rm badland-brain:ci --version
+          docker run --rm badland-brain:ci --help > /dev/null
+
+  gitleaks:
+    name: secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

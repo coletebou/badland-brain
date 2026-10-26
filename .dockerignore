@@ -1,0 +1,15 @@
+node_modules
+dist
+coverage
+.git
+.github
+.claude
+.env
+.env.*
+!.env.example
+*.sqlite
+*.sqlite-*
+data
+test
+integrations
+docs
