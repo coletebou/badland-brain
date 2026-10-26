@@ -1,0 +1,57 @@
+{
+  "name": "badland-brain",
+  "version": "0.1.0",
+  "description": "One shared, self-hosted memory for Claude Code, Codex, ChatGPT and any MCP client: Markdown entries in MongoDB, a rebuildable hybrid keyword + vector index in SQLite, and per-agent keys.",
+  "license": "MIT",
+  "author": "Cole Tebou",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/coletebou/badland-brain.git"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "memory",
+    "agents",
+    "claude-code",
+    "codex",
+    "sqlite-vec",
+    "hybrid-search"
+  ],
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "bin": {
+    "badland-brain": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.test.*",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "test:all": "npm run test && npm run test:e2e",
+    "start": "node dist/cli.js serve",
+    "prepare": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "express": "^5.3.0",
+    "mongoose": "^9.11.4",
+    "sqlite-vec": "^0.1.9",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.13.0",
+    "mongodb-memory-server": "^11.3.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}
