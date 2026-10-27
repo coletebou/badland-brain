@@ -2,6 +2,7 @@ import { delimiter } from 'node:path';
 
 import { HEADING, closesFence, fenceOpener } from '../brain/chunk.js';
 import { type BrainKind, MAX_BODY_CHARS, MAX_TITLE_CHARS } from '../brain/model.js';
+import { MAX_TAG_CHARS } from '../brain/store-views.js';
 import { findSecretShapes } from '../brain/redact.js';
 import type { BrainStore } from '../brain/store.js';
 import { MAX_IMPORT_ITEMS, brainImportItemSchema } from '../mcp/schemas.js';
@@ -104,6 +105,9 @@ export function resolveExcludeTerms(flagged: readonly string[], env: Record<stri
 export function resolveRepoRoots(flagged: readonly string[], env: Record<string, string | undefined>): string[] {
   return [...splitList(env.BRAIN_IMPORT_REPO_ROOTS, delimiter), ...flagged];
 }
+
+/** A tag an importer derives (from a repo name, say), cut to the tag limit so it cannot get its whole item refused. */
+export const tagOf = (tag: string): string => tag.slice(0, pairSafeEnd(tag, MAX_TAG_CHARS)).trim();
 
 /** Parts of an item over MAX_BODY_CHARS aim this far below the cap rather than at it. */
 export const IMPORT_PART_CHARS = 90_000;

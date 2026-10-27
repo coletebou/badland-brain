@@ -1,5 +1,6 @@
+import { createHash } from 'node:crypto';
 import { readFile, readdir, stat } from 'node:fs/promises';
-import { basename, join, relative, sep } from 'node:path';
+import { basename, join, relative, resolve, sep } from 'node:path';
 
 import { MAX_USER_TAGS } from '../brain/model.js';
 import { MAX_TAG_CHARS } from '../brain/store-views.js';
@@ -49,7 +50,9 @@ function tagsOf(raw: string | undefined): string[] {
  * Any folder of Markdown notes (a notes app's vault, a docs directory), recursively, skipping dot-directories and
  * node_modules. Each file is one `doc` entry: the title from frontmatter `title`, else the first `# ` heading, else
  * the file name; tags from frontmatter `tags`. The origin class is the caller's choice and defaults to `untrusted`,
- * since a folder may hold text someone else wrote: pass `owner` for your own notes.
+ * since a folder may hold text someone else wrote: pass `owner` for your own notes. A file's identity is its path
+ * below the folder, behind the folder's name and a short hash of its location, so two folders that share a name
+ * (`a/docs`, `b/docs`) never overwrite each other's files.
  */
 export function createMarkdownImporter(options: { originClass?: ImportItem['originClass'] } = {}): Importer {
   const originClass = options.originClass ?? 'untrusted';
@@ -57,7 +60,7 @@ export function createMarkdownImporter(options: { originClass?: ImportItem['orig
     source: 'markdown',
     async *scan({ paths, exclude }): AsyncIterable<ImportItem> {
       for (const root of paths) {
-        const label = basename(root) || 'notes';
+        const label = `${basename(root) || 'notes'}-${createHash('sha1').update(resolve(root)).digest('hex').slice(0, 8)}`;
         for await (const path of walk(root)) {
           if (exclude(path)) {
             continue;

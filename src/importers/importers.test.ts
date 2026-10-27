@@ -1,10 +1,12 @@
+import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
 import { MAX_USER_TAGS } from '../brain/model.js';
+import { brainImportItemSchema } from '../mcp/schemas.js';
 import { claudeMemoryImporter } from './claude-memory.js';
 import { codexMemoryImporter, namespaceOfCwd, splitTaskGroups } from './codex-memory.js';
 import { type ImportItem, type Importer, type ScanOptions, buildExcludeMatcher } from './framework.js';
@@ -148,6 +150,42 @@ describe('openclaw-workspace importer', () => {
   });
 });
 
+describe('import identities', () => {
+  it('keeps same-named markdown folders and Codex task groups from different directories apart, and stable per directory', async () => {
+    const roots = [join(temp(), 'docs'), join(temp(), 'docs')];
+    for (const root of roots) {
+      mkdirSync(root, { recursive: true });
+      writeFileSync(join(root, 'index.md'), `# Index\n\nthe index of ${root}`);
+    }
+    const ids = (await collect(createMarkdownImporter(), roots)).map((i) => i.externalId);
+    expect(new Set(ids).size).toBe(2);
+    expect((await collect(createMarkdownImporter(), roots)).map((i) => i.externalId)).toEqual(ids);
+    const dirs = [temp(), temp()];
+    for (const dir of dirs) {
+      writeFileSync(join(dir, 'MEMORY.md'), `# Task Group: Release workflow\napplies_to: cwd=${dir}\nsteps for ${dir}`);
+    }
+    const groups = (await collect(codexMemoryImporter, dirs)).map((i) => i.externalId);
+    expect(new Set(groups).size).toBe(2);
+    expect((await collect(codexMemoryImporter, dirs)).map((i) => i.externalId)).toEqual(groups);
+  });
+
+  it('cuts tags derived from long repo names to the tag limit, so their items still import', async () => {
+    const dir = join(temp(), `-srv-${'very-long-directory-name-'.repeat(4)}project`, 'memory');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'note.md'), `---\nname: Note\ntype: ${'t'.repeat(60)}\n---\nbody`);
+    const claude = await collect(claudeMemoryImporter, [dir]);
+    const codexDir = temp();
+    writeFileSync(join(codexDir, 'MEMORY.md'), `# Task Group: Long repo\napplies_to: cwd=/srv/code/${'r'.repeat(60)}\nbody`);
+    const codex = await collect(codexMemoryImporter, [codexDir], { repoRoots: ['/srv/code'] });
+    for (const item of [...claude, ...codex]) {
+      expect(item.tags.every((tag) => tag.length <= 50)).toBe(true);
+      expect(brainImportItemSchema.safeParse({ ...item, capturedAt: item.capturedAt?.toISOString() }).success).toBe(true);
+    }
+    expect(claude).toHaveLength(1);
+    expect(codex).toHaveLength(1);
+  });
+});
+
 describe('markdown importer', () => {
   it('imports every Markdown file below each path, skipping dot-directories, with title and tags from the file', async () => {
     const root = join(temp(), 'vault');
@@ -161,7 +199,8 @@ describe('markdown importer', () => {
     writeFileSync(join(root, 'node_modules', 'pkg', 'README.md'), 'dependency docs');
     writeFileSync(join(root, 'notes.txt'), 'not markdown');
     const items = await collect(createMarkdownImporter(), [root]);
-    expect(items.map((i) => i.externalId)).toEqual(['vault/inbox.md', 'vault/projects/deep/plan.markdown', 'vault/projects/untitled.md']);
+    const label = `vault-${createHash('sha1').update(resolve(root)).digest('hex').slice(0, 8)}`;
+    expect(items.map((i) => i.externalId)).toEqual([`${label}/inbox.md`, `${label}/projects/deep/plan.markdown`, `${label}/projects/untitled.md`]);
     expect(items[0]).toMatchObject({ title: 'Inbox', kind: 'doc', namespace: 'shared', originClass: 'untrusted', tags: ['source:markdown'] });
     expect(items[1].title).toBe('Garden plan');
     expect(items[1].body).toBe('Raised beds this year.');

@@ -2,7 +2,7 @@ import { readFile, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import type { BrainKind } from '../brain/model.js';
-import { type ImportItem, type Importer, repoNamespace } from './framework.js';
+import { type ImportItem, type Importer, repoNamespace, tagOf } from './framework.js';
 import { parseFrontmatter } from './frontmatter.js';
 import { repoOfMemoryDir } from './repos.js';
 
@@ -47,7 +47,7 @@ export const claudeMemoryImporter: Importer = {
           title: (data.name ?? name.replace(/\.md$/u, '')).slice(0, 200),
           body: `${description}${body}`,
           kind: kindOf(type),
-          tags: ['source:claude-memory', `repo:${repo}`, ...(type ? [`type:${type}`] : [])],
+          tags: ['source:claude-memory', tagOf(`repo:${repo}`), ...(type ? [tagOf(`type:${type}`)] : [])],
           namespace: repoNamespace(repo),
           originClass: 'agent',
           capturedAt: info.mtime,

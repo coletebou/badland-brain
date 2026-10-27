@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
-import { type ImportItem, type Importer, repoNamespace } from './framework.js';
+import { type ImportItem, type Importer, repoNamespace, tagOf } from './framework.js';
 import { repoOfPath } from './repos.js';
 
 const cwdOf = (text: string): string | undefined => /cwd[=:]\s*([^\s;,)]+)/u.exec(text)?.[1];
@@ -38,7 +38,8 @@ export function splitTaskGroups(memory: string): Array<{ title: string; body: st
 /**
  * Codex's own distillate in each memories directory given: task groups from MEMORY.md plus per-thread rollout
  * summaries. raw_memories.md and memory_summary.md are derived churn and are never read. Anything whose working
- * directory or namespace matches an exclusion term is dropped.
+ * directory or namespace matches an exclusion term is dropped. A task group's identity hashes its directory with its
+ * title, so two memories directories with a group of the same name keep both.
  */
 export const codexMemoryImporter: Importer = {
   source: 'codex-memory',
@@ -57,11 +58,11 @@ export const codexMemoryImporter: Importer = {
           continue;
         }
         yield {
-          externalId: `task-group:${createHash('sha1').update(group.title).digest('hex').slice(0, 12)}`,
+          externalId: `task-group:${createHash('sha1').update(`${resolve(dir)}\n${group.title}`).digest('hex').slice(0, 12)}`,
           title: group.title.slice(0, 200),
           body: group.body,
           kind: 'memory',
-          tags: ['source:codex-memory', ...(namespace === 'shared' ? [] : [namespace])],
+          tags: ['source:codex-memory', ...(namespace === 'shared' ? [] : [tagOf(namespace)])],
           namespace,
           originClass: 'agent',
           path: cwd,
@@ -88,7 +89,7 @@ export const codexMemoryImporter: Importer = {
           title: title.slice(0, 200),
           body: text,
           kind: 'handoff',
-          tags: ['source:codex-memory', 'kind:rollout', ...(namespace === 'shared' ? [] : [namespace])],
+          tags: ['source:codex-memory', 'kind:rollout', ...(namespace === 'shared' ? [] : [tagOf(namespace)])],
           namespace,
           originClass: 'agent',
           capturedAt: updated ? new Date(updated) : undefined,
