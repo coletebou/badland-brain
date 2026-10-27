@@ -15,6 +15,7 @@ describe('findSecretShapes', () => {
     expect(findSecretShapes('Use pnpm on deploy-bot; port 4310. Bearer tokens are minted by the keys command.')).toEqual([]);
     expect(findSecretShapes('The skeleton key is not a secret')).toEqual([]);
     expect(findSecretShapes('bbk_ prefixes mark brain keys; npm_ and glpat- are other prefixes')).toEqual([]);
+    expect(findSecretShapes('Signed off with xoxo-from-the-whole-team')).toEqual([]);
   });
 
   it('catches bearer headers, private keys, google keys, and JWTs', () => {
@@ -41,6 +42,10 @@ describe('findSecretShapes', () => {
     expect(findSecretShapes(`${'sk'}_live_${'k'.repeat(24)}`)).toEqual(['stripe-key']);
     expect(findSecretShapes(`xoxb-${'1'.repeat(12)}`)).toEqual(['slack-token']);
     expect(findSecretShapes(`SLACK_APP_TOKEN=xapp-1-${'A'.repeat(11)}-${'1'.repeat(13)}`)).toEqual(['slack-token']);
+    // Refresh and configuration tokens, and the browser session's token and its cookie.
+    for (const token of [`xoxe-1-${'R'.repeat(40)}`, `xoxe.xoxp-1-${'C'.repeat(40)}`, `xoxc-${'2'.repeat(12)}-${'c'.repeat(20)}`, `xoxd-${'d'.repeat(30)}`]) {
+      expect(findSecretShapes(`SLACK_TOKEN=${token}`)).toEqual(['slack-token']);
+    }
   });
 
   it('is stable across repeated calls (no global regex state)', () => {

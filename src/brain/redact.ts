@@ -11,8 +11,9 @@ export const SECRET_PATTERNS: ReadonlyArray<{ name: string; pattern: RegExp }> =
   { name: 'gitlab-token', pattern: /\bglpat-[A-Za-z0-9_-]{20,}/u },
   { name: 'npm-token', pattern: /\bnpm_[A-Za-z0-9]{36}\b/u },
   { name: 'stripe-key', pattern: /\b(?:sk|rk)_live_[A-Za-z0-9]{20,}/u },
-  // Bot, user and legacy tokens (xox?-) and app-level tokens (xapp-).
-  { name: 'slack-token', pattern: /\b(?:xox[abprs]|xapp)-[A-Za-z0-9-]{10,}/u },
+  // Bot, user, refresh and configuration (xoxe-), browser-session (xoxc-, with its xoxd- cookie) and legacy tokens,
+  // and app-level tokens (xapp-). Not xoxo-, which is ordinary prose far more often than a long-retired token.
+  { name: 'slack-token', pattern: /\b(?:xox[abcdeprs]|xapp)-[A-Za-z0-9-]{10,}/u },
   // Long-term (AKIA) and temporary STS (ASIA) access key ids, and the STS bearer-token and context-specific credential ids.
   { name: 'aws-access-key', pattern: /\b(?:AKIA|ASIA|ABIA|ACCA)[0-9A-Z]{16}\b/u },
   { name: 'google-api-key', pattern: /\bAIza[0-9A-Za-z_-]{35}(?![A-Za-z0-9_-])/u },
