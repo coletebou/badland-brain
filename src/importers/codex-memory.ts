@@ -45,6 +45,9 @@ export const codexMemoryImporter: Importer = {
   source: 'codex-memory',
   async *scan({ paths, exclude, repoRoots }): AsyncIterable<ImportItem> {
     for (const dir of paths) {
+      if (exclude(dir)) {
+        continue;
+      }
       let memory: string;
       try {
         memory = await readFile(join(dir, 'MEMORY.md'), 'utf8');

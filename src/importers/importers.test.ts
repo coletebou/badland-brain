@@ -169,6 +169,15 @@ describe('import identities', () => {
     expect((await collect(codexMemoryImporter, dirs)).map((i) => i.externalId)).toEqual(groups);
   });
 
+  it('skips a Codex memories directory that an exclusion term names, whatever its groups record', async () => {
+    const dir = join(temp(), 'private-memories');
+    mkdirSync(join(dir, 'rollout_summaries'), { recursive: true });
+    writeFileSync(join(dir, 'MEMORY.md'), '# Task Group: Anything\napplies_to: cwd=/srv/code/web-app\nbody');
+    writeFileSync(join(dir, 'rollout_summaries', 'r.md'), 'cwd: /srv/code/web-app\n\n# A rollout');
+    expect(await collect(codexMemoryImporter, [dir], { exclude: buildExcludeMatcher(['private']), repoRoots: ['/srv/code'] })).toEqual([]);
+    expect(await collect(codexMemoryImporter, [dir], { repoRoots: ['/srv/code'] })).toHaveLength(2);
+  });
+
   it('cuts tags derived from long repo names to the tag limit, so their items still import', async () => {
     const dir = join(temp(), `-srv-${'very-long-directory-name-'.repeat(4)}project`, 'memory');
     mkdirSync(dir, { recursive: true });
