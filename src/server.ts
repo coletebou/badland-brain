@@ -6,6 +6,7 @@ import mongoose from 'mongoose';
 import { KeyStore } from './auth/keys.js';
 import type { Embedder } from './brain/embeddings/index.js';
 import { BrainEntry } from './brain/model.js';
+import { resumeCatchUp } from './brain/reindex.js';
 import { type BrainRuntime, createBrainRuntime } from './brain/runtime.js';
 import type { ServerConfig } from './config.js';
 import { createApp } from './http/app.js';
@@ -21,8 +22,8 @@ export interface RunningServer {
 
 /**
  * Connect to MongoDB, wait for the collection's indexes (the unique ones are what make deduplication and import
- * identities race-safe), open the SQLite index, and listen. `close()` stops listening, closes the index and
- * disconnects; a second call is a no-op.
+ * identities race-safe), open the SQLite index, finish the catch-up of a reindex that was interrupted after its swap,
+ * and listen. `close()` stops listening, closes the index and disconnects; a second call is a no-op.
  */
 export async function startServer(config: ServerConfig, opts: { embedder?: Embedder; logger?: Logger; connect?: boolean } = {}): Promise<RunningServer> {
   const logger = opts.logger ?? createLogger(config.logLevel);
@@ -32,6 +33,7 @@ export async function startServer(config: ServerConfig, opts: { embedder?: Embed
   }
   await BrainEntry.init();
   const runtime = createBrainRuntime(config.brain, { embedder: opts.embedder, logger });
+  await resumeCatchUp(runtime, logger);
   const app = createApp({
     runtime, keys, logger,
     rateLimitPerMinute: config.rateLimitPerMinute,

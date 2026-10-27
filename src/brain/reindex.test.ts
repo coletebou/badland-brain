@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -10,8 +10,8 @@ import { createFakeEmbedder } from './embeddings/index.js';
 import { moveIndexFiles, recoverInterruptedSwap } from './index/files.js';
 import { openBrainIndex } from './index/sqlite.js';
 import { BrainEntry } from './model.js';
-import { getReindexStatus, resetReindexForTests, startReindex, waitForReindex } from './reindex.js';
-import { type BrainRuntime, identityOf } from './runtime.js';
+import { getReindexStatus, resetReindexForTests, resumeCatchUp, startReindex, waitForReindex } from './reindex.js';
+import { type BrainRuntime, createBrainRuntime, identityOf } from './runtime.js';
 import { searchBrain } from './search.js';
 import { BrainStore } from './store.js';
 
@@ -104,6 +104,68 @@ describe('in-process reindex', () => {
     // The recall row the retained search appended to the old file was carried into the live index when the handle retired.
     expect(runtime.index.recallSince().length).toBe(recallBeforeRelease + 1);
     runtime.index.close();
+  });
+
+  it('keeps the new index crash-safe across the swap, even when the retired handle closes after it', async () => {
+    const { runtime, dbPath } = makeRuntime();
+    await runtime.store.note(actor, { title: 'Ports', body: 'the preview server listens on 4310', kind: 'reference' });
+    // A search holds the old handle across the swap, so it closes only once the new index has its own -wal and -shm.
+    let finishEmbedding!: () => void;
+    const gate = new Promise<void>((resolve) => { finishEmbedding = resolve; });
+    const realEmbedQuery = runtime.embedder.embedQuery.bind(runtime.embedder);
+    vi.spyOn(runtime.embedder, 'embedQuery').mockImplementationOnce(async (text) => { await gate; return realEmbedQuery(text); });
+    const inFlight = searchBrain(runtime, 'test', { query: 'preview server 4310' });
+    startReindex(runtime);
+    expect((await waitForReindex()).state).toBe('done');
+    await runtime.store.note(actor, { title: 'After', body: 'written after the swap', kind: 'memory' });
+    finishEmbedding();
+    await inFlight; // the retired handle closes here
+    await runtime.store.note(actor, { title: 'Later', body: 'written after the old handle closed', kind: 'memory' });
+    expect(existsSync(`${dbPath}-wal`)).toBe(true);
+    // A crash now: copy the files as they are on disk, without closing the live handle, and open the copy.
+    const copy = join(mkdtempSync(join(tmpdir(), 'brain-crash-')), 'brain.sqlite');
+    for (const suffix of ['', '-wal', '-shm']) {
+      if (existsSync(`${dbPath}${suffix}`)) {
+        copyFileSync(`${dbPath}${suffix}`, `${copy}${suffix}`);
+      }
+    }
+    const recovered = openBrainIndex({ path: copy, identity: identityOf(runtime.config, runtime.embedder) });
+    expect(recovered.counts().entries).toBe(3);
+    expect(recovered.fts('"swap" OR "closed"', { scopes: ['core'] }, 5)).toHaveLength(2);
+    recovered.close();
+    runtime.index.close();
+  });
+
+  it('removes entries forgotten mid-rebuild at once, and a restart replays a catch-up the swap left unfinished', async () => {
+    const { runtime } = makeRuntime();
+    const ports = await runtime.store.note(actor, { title: 'Ports', body: 'the preview server listens on 4310', kind: 'reference' });
+    const withdrawn = await runtime.store.note(actor, { title: 'Withdrawn', body: 'a fact that gets withdrawn', kind: 'memory' });
+    const realReindexAll = BrainStore.prototype.reindexAll;
+    vi.spyOn(BrainStore.prototype, 'reindexAll').mockImplementationOnce(async function (this: BrainStore, ...args: Parameters<BrainStore['reindexAll']>) {
+      const counts = await realReindexAll.apply(this, args);
+      // Written while the rebuild ran, after its cursor had passed both entries: only the old file has these.
+      await runtime.store.supersede(actor, ports.entry.slug, { body: 'the preview server listens on 4320', reason: 'moved', expectedHash: ports.entry.contentHash });
+      await runtime.store.forget(actor, { slug: withdrawn.entry.slug }, 'withdrawn');
+      // The process stops between the swap and the catch-up.
+      vi.spyOn(runtime.store, 'indexEntry').mockRejectedValueOnce(new Error('process stopped'));
+      return counts;
+    });
+    startReindex(runtime);
+    expect(await waitForReindex()).toMatchObject({ state: 'failed', error: 'process stopped' });
+    const withdrawnId = (await BrainEntry.findOne({ slug: withdrawn.entry.slug }))!._id.toString();
+    expect(runtime.index.hasEntry(withdrawnId)).toBe(false);
+    expect(runtime.index.fts('"4320"', { scopes: ['core'] }, 5)).toHaveLength(0);
+    expect(runtime.index.pendingCatchUp()).not.toBeNull();
+
+    // The next start replays what the swap was owed before it serves.
+    runtime.index.close();
+    const restarted = createBrainRuntime(runtime.config, { embedder: runtime.embedder });
+    await resumeCatchUp(restarted);
+    expect(restarted.index.fts('"4320"', { scopes: ['core'] }, 5)).toHaveLength(1);
+    expect(restarted.index.fts('"4310"', { scopes: ['core'] }, 5)).toHaveLength(0);
+    expect(restarted.index.hasEntry(withdrawnId)).toBe(false);
+    expect(restarted.index.pendingCatchUp()).toBeNull();
+    restarted.index.close();
   });
 
   it('queues a reindex requested while the previous retired handle is still draining, instead of answering with the old done', async () => {

@@ -117,8 +117,18 @@ const toChunkRow = (r: RawChunkRow): IndexChunkRow => ({
 export class BrainIndex {
   private inFlight = 0;
   private onIdle: (() => void) | null = null;
+  private removalMirror: BrainIndex | null = null;
 
   constructor(private readonly db: DatabaseSync, readonly stale: boolean) {}
+
+  /**
+   * While a rebuild runs beside this index, every entry removed here is removed from the rebuild too, so an entry
+   * forgotten mid-rebuild is not served again from the moment the rebuild is installed. Best effort: the reindex
+   * catch-up removes it in any case.
+   */
+  mirrorRemovalsTo(index: BrainIndex | null): void {
+    this.removalMirror = index;
+  }
 
   private transaction(work: () => void): void {
     this.db.exec('BEGIN');
@@ -183,6 +193,28 @@ export class BrainIndex {
       this.deleteChunksOf(entryId);
       this.db.prepare('DELETE FROM entries WHERE entry_id = ?').run(entryId);
     });
+    try {
+      this.removalMirror?.removeEntry(entryId);
+    } catch {
+      // The rebuild's own catch-up removes it.
+    }
+  }
+
+  /**
+   * The instant from which writes made while this file was being rebuilt still have to be replayed into it, or null
+   * when nothing is owed. A reindex sets it in the file it installs and clears it once its catch-up has run.
+   */
+  pendingCatchUp(): number | null {
+    const row = this.db.prepare("SELECT value FROM meta WHERE key = 'catch_up_from'").get() as { value: string } | undefined;
+    return row ? Number(row.value) : null;
+  }
+
+  setPendingCatchUp(fromMs: number | null): void {
+    if (fromMs === null) {
+      this.db.prepare("DELETE FROM meta WHERE key = 'catch_up_from'").run();
+      return;
+    }
+    this.db.prepare("INSERT OR REPLACE INTO meta(key, value) VALUES ('catch_up_from', ?)").run(String(fromMs));
   }
 
   /**
