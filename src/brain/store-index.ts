@@ -38,6 +38,21 @@ const toChunkInput = (chunk: Chunk, embedding: Float32Array | null): IndexChunkI
   ({ ord: chunk.ord, startLine: chunk.startLine, endLine: chunk.endLine, text: chunk.text, embedding });
 
 /**
+ * The chunker never splits a fenced block or a single line, so one chunk can hold up to a whole body and run past a
+ * provider's input limit, which would keep the entry out of the index altogether. Its embedding input is cut to the
+ * largest text embedded whole (four characters per token), never inside a surrogate pair; the keyword index keeps
+ * the whole chunk.
+ */
+export function embeddingText(text: string, config: Pick<BrainConfig, 'wholeNoteTokenLimit'>): string {
+  const max = config.wholeNoteTokenLimit * 4;
+  if (text.length <= max) {
+    return text;
+  }
+  const code = text.charCodeAt(max - 1);
+  return text.slice(0, code >= 0xd800 && code <= 0xdbff ? max - 1 : max);
+}
+
+/**
  * Chunk the body and embed each chunk, reusing cached vectors for unchanged inputs. A stale index still carries
  * another model's vec0 table, so writes to it keep only the keyword rows current and leave vectors to the reindex.
  */
@@ -46,7 +61,7 @@ export async function embedChunks(deps: IndexDeps, doc: IBrainEntryDocument): Pr
   if (deps.index.stale) {
     return chunks.map((chunk) => toChunkInput(chunk, null));
   }
-  const inputs = chunks.map((chunk) => deps.embedder.documentInput({ title: doc.title, tags: doc.tags, text: chunk.text }));
+  const inputs = chunks.map((chunk) => deps.embedder.documentInput({ title: doc.title, tags: doc.tags, text: embeddingText(chunk.text, deps.config) }));
   const keys = inputs.map((input) => cacheKey(deps.embedder, input));
   const vectors: Array<Float32Array | null> = keys.map((key) => deps.index.cacheGet(key));
   const missing = vectors.flatMap((vector, i) => (vector === null ? [i] : []));

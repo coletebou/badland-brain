@@ -1086,6 +1086,26 @@ describe('BrainStore', () => {
     expect(index.fts('"hazard"', { scopes: ['core'], tier: 'curated', includeSuperseded: true }, 5)).toHaveLength(1);
   });
 
+  it('indexes a chunk too large to split, embedding only its opening, so a provider input limit cannot keep it out', async () => {
+    const embedder = createFakeEmbedder(32);
+    const real = embedder.embedDocuments.bind(embedder);
+    vi.spyOn(embedder, 'embedDocuments').mockImplementation(async (inputs) => {
+      if (inputs.some((input) => input.length > 8_000)) {
+        throw new Error('OpenAI-compatible embedding request failed with 400: input too long');
+      }
+      return real(inputs);
+    });
+    const limited = new BrainStore({ index, embedder, config });
+    const fence = ['```json', ...Array.from({ length: 2_000 }, (_, i) => `  "field_${i}": ${i},`), '  "closing_marker": true', '```'].join('\n');
+    expect(fence.length).toBeGreaterThan(30_000);
+    const { entry } = await limited.note(actor, { title: 'Big fence', body: fence, kind: 'doc' });
+    const doc = (await BrainEntry.findOne({ slug: entry.slug }))!;
+    expect(index.hasEntry(doc._id.toString())).toBe(true);
+    // The keyword index holds the whole block; the vector covers its opening.
+    expect(index.fts('"closing_marker"', { scopes: ['core'] }, 5)).toHaveLength(1);
+    expect(index.knn(await embedder.embedQuery(embedder.queryInput('field_1')), { scopes: ['core'] }, 5)).toHaveLength(1);
+  });
+
   it('windows long bodies on get', async () => {
     const body = 'x'.repeat(9000);
     const { entry } = await store.note(actor, { title: 'Long', body, kind: 'doc' });
