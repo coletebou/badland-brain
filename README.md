@@ -329,7 +329,7 @@ Settings come from the environment; [`.env.example`](.env.example) documents eve
 | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | none | Required for `gemini` |
 | `BRAIN_EMBED_API_KEY` or `OPENAI_API_KEY` | none | Required for `api.openai.com`, optional for other endpoints |
 | `BRAIN_RATE_LIMIT_PER_MINUTE`, `BRAIN_WRITE_RATE_LIMIT_PER_MINUTE` | `240`, `60` | Per key |
-| `BRAIN_AGENT_MAX_ENTRIES`, `BRAIN_AGENT_MAX_BYTES` | unlimited | Cap what agents may store, every version included |
+| `BRAIN_AGENT_MAX_ENTRIES`, `BRAIN_AGENT_MAX_BYTES` | unlimited | Cap what agent keys may store, every version included; owner writes, imports and promoted copies never count |
 | `BRAIN_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` or `silent` |
 | `BRAIN_URL`, `BRAIN_KEY`, `BRAIN_KEY_FILE` | `http://127.0.0.1:8270`, none, none | Where the owner CLI and the Drover plugin find the server, and the key they use |
 | `BRAIN_IMPORT_PATHS`, `BRAIN_IMPORT_EXCLUDE`, `BRAIN_IMPORT_REPO_ROOTS` | none | Import defaults: directories, exclusion terms (comma-separated), repo roots |
@@ -384,6 +384,8 @@ badland-brain import markdown --path ~/notes --origin owner --namespace repo:not
   case-insensitive). There are no built-in exclusions.
 - `--namespace <ns>` puts every item in one namespace; `--origin` sets the markdown source's origin
   class; `--dry-run` scans and counts without a key or a server.
+- A markdown file's identity is its path below the folder, behind the folder's name and a short hash of
+  its location, so two folders that share a name never collide; a moved folder imports as new entries.
 
 A file over 100,000 characters is imported as ordered parts (`<id>#part-<n>`, cut at a heading or a
 blank line where possible). A re-import retires the parts a file no longer has, and the whole-file or part identities
