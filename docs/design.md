@@ -97,7 +97,10 @@ leaves an unsearchable live entry for a retry to finish, never a searchable ghos
 
 **Imports** are idempotent on their identity (source system plus external id). An unchanged re-import
 refreshes metadata; a changed one supersedes the current version, whoever wrote it; an agent's
-correction of an imported item stays current until the source itself changes. Lineage is read from
+correction of an imported item stays current until the source itself changes, even when the original
+it corrected was forgotten. An item too long for one entry travels as parts `<id>#part-<k>` that carry
+their count, and a re-import forgets the identities the item no longer has: parts past the new count,
+or the whole-item identity, or every part when the item fits again. Lineage is read from
 `source` alone: supersede copies name the slug they replaced and promotions the slug they copied, so
 an unrelated entry an import was folded into is never treated as a version of it.
 
@@ -140,9 +143,15 @@ CREATE TABLE embed_cache (key TEXT PRIMARY KEY, vec BLOB NOT NULL, at_ms INTEGER
 **Reindex** runs inside the server: it builds `<db>.rebuild` beside the live file, starting from the
 live embedding cache (so an unchanged model re-embeds nothing), carries the recall history over with
 each row re-pointed at its rebuilt chunk, moves the live file aside, installs the rebuild, and
-re-indexes anything written meanwhile. A request that captured the old handle finishes against it;
-the handle closes once the last such request releases it. A failed swap moves the previous file
-back; a crash mid-swap is repaired when the server next starts.
+re-indexes anything written meanwhile. Removals from the live index are mirrored into the rebuild
+while it is built, so an entry forgotten mid-rebuild is never served from the new file. The rebuilt
+file carries a mark saying from when it still owes that catch-up, cleared once it ran; a server that
+stopped in between finds the mark at its next start and replays before serving, removals first, since
+they need no embedding. A request that captured the old handle finishes against it; the handle closes
+once the last such request releases it. Moving its files while it is open is safe in WAL mode: when it
+closes, SQLite sees that its database moved and skips the checkpoint and the removal of the `-wal` and
+`-shm` names, which by then belong to the new file. A failed swap moves the previous file back; a crash
+mid-swap is repaired when the server next starts.
 
 ## Embeddings
 
@@ -170,7 +179,9 @@ A body of up to about 800 tokens (four characters per token) is embedded whole: 
 short, and whole-note vectors win there. A longer body splits at headings (H1-H3), packs sections
 up to 600 tokens, and splits an oversized section by lines with about 72 tokens of overlap. A fenced
 code block is never split, and one longer than the overlap is never carried forward into the next
-chunk. Every chunk keeps its line range for citation.
+chunk. Every chunk keeps its line range for citation. A chunk that cannot be split (one fenced block or
+one line longer than a whole note) is embedded by its first 3,200 characters, so no provider's input
+limit can keep an entry out of the index; keyword search covers all of it.
 
 ## Retrieval
 

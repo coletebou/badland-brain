@@ -386,8 +386,8 @@ badland-brain import markdown --path ~/notes --origin owner --namespace repo:not
   class; `--dry-run` scans and counts without a key or a server.
 
 A file over 100,000 characters is imported as ordered parts (`<id>#part-<n>`, cut at a heading or a
-blank line where possible). Re-imports never retire a part that a shrinking file no longer has; forget it by its
-identity.
+blank line where possible). A re-import retires the parts a file no longer has, and the whole-file or part identities
+it leaves behind when it crosses the limit either way, so no stale text stays current.
 
 ### The curated tier
 
@@ -415,8 +415,10 @@ badland-brain health
 ```
 
 The rebuild reuses the embedding cache, so an unchanged model re-embeds nothing, and it carries the
-recall history over. Writes that land during the rebuild are indexed after the swap; a failed swap
-puts the previous file back, and a crash mid-swap is repaired at the next start.
+recall history over. Entries forgotten during the rebuild leave it at once; other writes that land
+meanwhile are indexed right after the swap, and a server stopped before that catch-up finishes runs it
+at its next start, before serving. A failed swap puts the previous file back, and a crash mid-swap is
+repaired at the next start.
 
 ### Eval
 
@@ -446,6 +448,8 @@ nothing in this release reads it, so losing it costs only that history.
 - The `fake` embedder is a hashed bag of words for tests and offline trials, not a semantic model.
 - The eval corpus is small and synthetic: a smoke test of the retrieval pipeline, not a benchmark.
 - Forget is a soft delete: forgotten entries leave the index and every read, but stay in MongoDB.
+- The in-process reindex renames SQLite files while they are open, which Linux and macOS allow; it is
+  untested on Windows, so run the server in Docker or WSL there.
 - No consolidation pass yet: the `review` tier and the `needs-review` tag wait for one.
 
 ## Development

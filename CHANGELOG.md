@@ -44,7 +44,8 @@ First public release.
 - The `badland-brain` command: `serve`, `keys mint|list|revoke`, `import`, `promote`, `supersede`,
   `forget`, `forget-source`, `reindex`, `health` and `eval`.
 - Importers for Claude Code memory, Codex memory, OpenClaw workspaces and Markdown folders, with
-  configurable exclusion terms and repo roots, oversized files split into parts, and dry runs.
+  configurable exclusion terms and repo roots, oversized files split into parts that re-imports keep
+  in step, and dry runs.
 - A retrieval eval over a synthetic corpus: recall@5, MRR@5, abstention and revocation checks.
 - A Drover plugin (`integrations/drover`) with `brain.*` ops and search kind `brain`.
 - A Dockerfile and a Compose file with MongoDB.
