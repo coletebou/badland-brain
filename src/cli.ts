@@ -329,7 +329,9 @@ async function main(argv: string[]): Promise<void> {
 }
 
 main(process.argv.slice(2)).catch((error: unknown) => {
-  if (error instanceof UsageError || (error as { code?: string }).code?.startsWith('ERR_PARSE_ARGS')) {
+  // Node's argument errors carry a string code; a MongoDB server error carries a number (18 for a failed login).
+  const code = (error as { code?: unknown }).code;
+  if (error instanceof UsageError || (typeof code === 'string' && code.startsWith('ERR_PARSE_ARGS'))) {
     process.stderr.write(`badland-brain: ${(error as Error).message}\n`);
     process.exitCode = 64;
     return;

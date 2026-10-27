@@ -210,4 +210,16 @@ describe('badland-brain end to end: the built server, a real MongoDB, MCP client
     expect(server.logs()).not.toContain(secret);
     expect(server.logs()).not.toContain('bakes the release candidate');
   });
+
+  it('reports a database failure in one line, though the driver\'s error code is a number', async () => {
+    // mongod refuses an unknown user with code 18 (AuthenticationFailed), whether or not it enforces authentication.
+    const uri = new URL(mongo.getUri('brain-e2e'));
+    uri.username = 'nobody';
+    uri.password = 'wrong';
+    uri.searchParams.set('authSource', 'admin');
+    const failed = await runCli(['serve'], { ...env, BRAIN_MONGODB_URI: uri.toString(), BRAIN_DATA_DIR: join(dataDir, 'bad-login') });
+    expect(failed.code).toBe(1);
+    expect(failed.stderr).toMatch(/^badland-brain: Authentication failed/mu);
+    expect(failed.stderr).not.toMatch(/TypeError|startsWith/u);
+  });
 });
