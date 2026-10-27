@@ -13,9 +13,16 @@ describe('buildFtsQuery', () => {
     expect(buildFtsQuery('col:value ^prefix *')).toBe('"col" OR "value" OR "prefix"');
   });
 
+  it('keeps a flag\'s leading hyphens, as the tokenizer does, and searches its bare name too', () => {
+    expect(buildFtsQuery('pnpm install --frozen-lockfile')).toBe('"pnpm" OR "install" OR "--frozen-lockfile" OR "frozen-lockfile"');
+    expect(buildFtsQuery('ls -la')).toBe('"ls" OR "-la" OR "la"');
+    // A one-letter flag keeps its flag form; its bare letter is too short to search for.
+    expect(buildFtsQuery('-v')).toBe('"-v"');
+  });
+
   it('strips edge punctuation, dedupes case-insensitively, caps at 12 tokens, returns null when empty', () => {
     expect(buildFtsQuery('Foo foo FOO')).toBe('"foo"');
-    expect(buildFtsQuery('-trailing- .dotted.')).toBe('"trailing" OR "dotted"');
+    expect(buildFtsQuery('trailing- .dotted.')).toBe('"trailing" OR "dotted"');
     expect(buildFtsQuery('a  -  !')).toBeNull();
     expect(buildFtsQuery('what is the of')).toBeNull();
     expect(buildFtsQuery('what is the capital of')).toBe('"capital"');

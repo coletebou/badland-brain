@@ -107,6 +107,15 @@ describe('searchBrain', () => {
     expect(deps.index.recallSince()).toHaveLength(1);
   });
 
+  it('finds a CLI flag by keyword as written, and its bare name too', async () => {
+    const flag = await store.note(actor, { title: 'CI install', body: 'CI runs pnpm install --frozen-lockfile on every push', kind: 'memory' });
+    const bare = await store.note(actor, { title: 'Lockfile mode', body: 'frozen-lockfile mode leaves the lockfile untouched', kind: 'memory' });
+    const hits = await searchBrain(deps, 'test', { query: '--frozen-lockfile' });
+    const textRank = (slug: string) => hits.find((hit) => hit.slug === slug)?.textRank ?? null;
+    expect(textRank(flag.entry.slug)).not.toBeNull();
+    expect(textRank(bare.entry.slug)).not.toBeNull();
+  });
+
   it('serves keyword-only results while the index is stale', async () => {
     await store.note(actor, { title: 'Ports', body: 'the preview server listens on 4310', kind: 'reference' });
     const path = join(mkdtempSync(join(tmpdir(), 'brain-stale-')), 'b.sqlite');
