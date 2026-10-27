@@ -20,6 +20,8 @@ describe('findSecretShapes', () => {
   it('catches bearer headers, private keys, google keys, and JWTs', () => {
     expect(findSecretShapes(`Authorization: Bearer ${'x'.repeat(20)}`)).toEqual(['bearer-token']);
     expect(findSecretShapes(['-----BEGIN', 'PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----'].join(' '))).toEqual(['private-key']);
+    expect(findSecretShapes(['-----BEGIN', 'PGP PRIVATE KEY BLOCK-----\n\nlQOYBF\n-----END PGP PRIVATE KEY BLOCK-----'].join(' '))).toEqual(['private-key']);
+    expect(findSecretShapes(['-----BEGIN', 'PGP PUBLIC KEY BLOCK-----'].join(' '))).toEqual([]);
     expect(findSecretShapes(`AIza${'Q'.repeat(35)}`)).toEqual(['google-api-key']);
     expect(findSecretShapes(`token eyJ${'a'.repeat(10)}.${'b'.repeat(10)}.${'c'.repeat(10)}`)).toEqual(['jwt']);
   });

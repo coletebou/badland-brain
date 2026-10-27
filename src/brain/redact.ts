@@ -3,7 +3,8 @@
  * process for the embedding provider) instead of masking it, and only the pattern name is ever reported.
  */
 export const SECRET_PATTERNS: ReadonlyArray<{ name: string; pattern: RegExp }> = [
-  { name: 'private-key', pattern: /-----BEGIN [A-Z ]{0,40}PRIVATE KEY-----/u },
+  // PEM private keys of every kind, and armored OpenPGP private keys (`... PRIVATE KEY BLOCK-----`).
+  { name: 'private-key', pattern: /-----BEGIN [A-Z ]{0,40}PRIVATE KEY(?: BLOCK)?-----/u },
   { name: 'brain-api-key', pattern: /\bbbk_[A-Za-z0-9_-]{20,}/u },
   { name: 'openai-style-key', pattern: /\bsk-(?:ant-|proj-|or-)?[A-Za-z0-9_-]{20,}/u },
   { name: 'github-token', pattern: /\b(?:ghp|gho|ghu|ghs|ghr|github_pat)_[A-Za-z0-9_]{20,}/u },
