@@ -303,7 +303,7 @@ describe('errors say what to fix, never with the key', () => {
 
 describe('search kind brain (Drover\'s search asks the brain at query time)', () => {
   const HIT = { slug: 'bot-gateway-each-bot-at-its-own-url-61f638', title: 'Bot gateway: each bot at its own URL', kind: 'decision', tier: 'episodic', namespace: 'repo:example', originClass: 'agent', authorAgent: 'agent@laptop', importance: 5, validFrom: '2026-10-20T20:16:40.798Z', updatedAt: '2026-10-20T20:16:40.815Z', startLine: 1, endLine: 10, snippet: 'Bots reach the service through its gateway.\n\n- Connected as themselves…', score: 0.8428, similarity: 0.6343, vecRank: 2, textRank: 6 };
-  const MAPPED = { title: HIT.title, snippet: HIT.snippet, ts: '2026-10-20T20:16:40.798Z', slug: HIT.slug, namespace: 'repo:example', tier: 'episodic', author: 'agent@laptop', role: 'decision', score: 0.8428 };
+  const MAPPED = { title: HIT.title, snippet: HIT.snippet, ts: '2026-10-20T20:16:40.798Z', slug: HIT.slug, namespace: 'repo:example', tier: 'episodic', author: 'agent@laptop', role: 'decision', origin: 'agent', score: 0.8428 };
   const realSearch = TOOLS.brain_search.run;
   const answerWith = (hits) => { TOOLS.brain_search.run = (a) => ok({ hits, args: a }); };
   let seen;
@@ -315,7 +315,7 @@ describe('search kind brain (Drover\'s search asks the brain at query time)', ()
     const { validFrom, ...noValidFrom } = HIT;
     assert.equal(validFrom, HIT.validFrom);
     assert.equal(brain.searchHit(noValidFrom).ts, '2026-10-20T20:16:40.815Z');
-    assert.deepEqual(brain.searchHit({}), { title: null, snippet: '', ts: null, slug: null, namespace: null, tier: null, author: null, role: null, score: null });
+    assert.deepEqual(brain.searchHit({}), { title: null, snippet: '', ts: null, slug: null, namespace: null, tier: null, author: null, role: null, origin: null, score: null });
   });
   test('the source sends brain_search at most 300 characters and asks for at most 10 hits', async () => {
     use(fake); answerWith([HIT]);

@@ -300,6 +300,8 @@ export function searchHit(h = {}) {
   return {
     title: h.title ?? null, snippet: h.snippet ?? '', ts: h.validFrom ?? h.updatedAt ?? null,
     slug: h.slug ?? null, namespace: h.namespace ?? null, tier: h.tier ?? null, author: h.authorAgent ?? null, role: h.kind ?? null,
+    // How far to trust the text: owner, agent, untrusted or system. Clients are told to weigh it before acting on a hit.
+    origin: h.originClass ?? null,
     score: typeof h.score === 'number' ? h.score : null,
   };
 }
