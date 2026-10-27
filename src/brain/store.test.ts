@@ -648,6 +648,40 @@ describe('BrainStore', () => {
     expect((await BrainEntry.findOne({ slug: c1.slug }))?.live).toBe(false);
   });
 
+  it('re-promoting a re-imported source replaces the copy promoted from its earlier version', async () => {
+    const source = { system: 'claude-memory', externalId: 'example/promoted.md' };
+    const first = await store.note(actor, { title: 'Rule', body: 'the rule, version one', kind: 'memory', source });
+    const c1 = await store.promote(first.entry.slug, { standing: true });
+    const changed = await store.note(actor, { title: 'Rule', body: 'the rule, version two', kind: 'memory', source });
+    expect(changed.created).toBe(true);
+    const c2 = await store.promote(changed.entry.slug, { standing: true });
+    expect(await BrainEntry.countDocuments({ tier: 'curated', live: true })).toBe(1);
+    expect((await store.get(c2.slug))?.body).toBe('the rule, version two');
+    expect((await store.get(c1.slug))?.supersededBy).toBe(c2.slug);
+    // So does promoting an agent's correction of that re-import: still one live curated copy, now the correction's.
+    const corrected = await store.supersede(actor, changed.entry.slug, { body: 'the rule, version two, corrected', reason: 'fix', expectedHash: changed.entry.contentHash });
+    const c3 = await store.promote(corrected.slug, { standing: true });
+    expect(await BrainEntry.countDocuments({ tier: 'curated', live: true })).toBe(1);
+    expect((await store.get(c3.slug))?.body).toBe('the rule, version two, corrected');
+    expect(index.fts('"version one"', { scopes: ['core'], tier: 'curated' }, 5)).toHaveLength(0);
+  });
+
+  it('an unchanged re-import keeps an agent\'s correction current after the retired original was forgotten by slug', async () => {
+    const source = { system: 'clippings', externalId: 'web/forgotten-root' };
+    const imported = await store.note(actor, { title: 'Clip', body: 'clip original text', kind: 'doc', source });
+    const corrected = await store.supersede(actor, imported.entry.slug, { body: 'clip text, corrected', reason: 'fix', expectedHash: imported.entry.contentHash });
+    expect(await store.forget(actor, { slug: imported.entry.slug }, 'drop the original')).toEqual({ forgotten: 1 });
+    const again = await store.note(actor, { title: 'Clip', body: 'clip original text', kind: 'doc', source });
+    expect(again).toMatchObject({ created: false, entry: { slug: corrected.slug } });
+    expect(await BrainEntry.countDocuments({ live: true })).toBe(1);
+    expect(index.fts('"original"', { scopes: ['core'] }, 5)).toHaveLength(0);
+    // A changed source still replaces the correction.
+    const changed = await store.note(actor, { title: 'Clip', body: 'clip text, revised at the source', kind: 'doc', source });
+    expect(changed.created).toBe(true);
+    expect((await store.get(corrected.slug))?.supersededBy).toBe(changed.entry.slug);
+    expect(await BrainEntry.countDocuments({ live: true })).toBe(1);
+  });
+
   it('strips the store-owned tags from caller input so an agent cannot forge a standing entry', async () => {
     const { entry } = await store.note(actor, { title: 'T', body: 'a body', kind: 'memory', tags: ['standing', 'needs-review', 'real-tag'] });
     expect(entry.tags).toEqual(['real-tag']);

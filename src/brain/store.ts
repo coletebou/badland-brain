@@ -203,10 +203,12 @@ export class BrainStore {
    * them (an agent's correction carries `supersede/<slug>`, not the identity). `imported` is the last one the
    * importer wrote, whose hash says whether the source changed since; `head` is the live version, or null when every
    * version was retired (a changed import folded onto an unrelated twin, say). Null as a whole when nothing was
-   * imported under the identity.
+   * imported under the identity. Forgotten versions stay in the walk, as in `derived`: an import's original forgotten
+   * by slug must not hide the live correction made from it, or an unchanged re-import would bring the original back
+   * beside it.
    */
   private async importedVersions(source: IBrainSource): Promise<{ imported: IBrainEntryDocument; head: IBrainEntryDocument | null; slugs: string[] } | null> {
-    const written = await BrainEntry.find({ forgotten: { $exists: false }, 'source.system': source.system, 'source.externalId': source.externalId }).sort({ createdAt: -1 });
+    const written = await BrainEntry.find({ 'source.system': source.system, 'source.externalId': source.externalId }).sort({ createdAt: -1 });
     if (written.length === 0) {
       return null;
     }
@@ -709,11 +711,11 @@ export class BrainStore {
     // A retry, or a re-promotion after the copy was superseded or demoted, finds the live curated descendant through
     // the lineage and brings it in step rather than starting a second curated branch: the owner's corrected successor
     // is kept, the source's (again trusted) provenance is restored, and the review tag, which the re-promotion
-    // answers, is cleared. Look across the whole supersession chain, not just source.slug: a copy promoted from an
-    // earlier version of this lineage (e.g. promote(E1) then supersede E1 -> E2 then promote(E2)) must be found, not
-    // duplicated. The loop re-resolves when a concurrent re-promotion wins the retirement CAS or the insert, so two
-    // callers never both end with a live copy.
-    const chain = await this.supersedePredecessors(source);
+    // answers, is cleared. Look across every version of the lineage, not just source.slug: a copy promoted from an
+    // earlier version (promote(E1), supersede E1 -> E2, promote(E2); or promote an import, re-import it changed, then
+    // promote the new version) must be found, not duplicated. The loop re-resolves when a concurrent re-promotion
+    // wins the retirement CAS or the insert, so two callers never both end with a live copy.
+    const chain = await this.lineageVersions(source);
     for (let attempt = 0; attempt < 3; attempt++) {
       const lineage = await this.curatedLineage([...chain, source.slug]);
       const live = lineage.find((doc) => doc.live) ?? null;
@@ -838,8 +840,12 @@ export class BrainStore {
     return true;
   }
 
-  /** The episodic predecessor slugs reachable from `doc` up its supersede chain (bounded, cycle-safe). */
-  private async supersedePredecessors(doc: IBrainEntryDocument): Promise<string[]> {
+  /**
+   * The other versions of the lineage `doc` belongs to: its predecessors up the supersede chain (bounded, cycle-safe)
+   * and, when that chain starts at an import, every version written under the import identity plus the corrections
+   * made from them. A re-import carries the identity rather than `supersede/<slug>`, so the chain alone misses it.
+   */
+  private async lineageVersions(doc: IBrainEntryDocument): Promise<string[]> {
     const slugs: string[] = [];
     const seen = new Set([doc.slug]);
     let cursor: IBrainEntryDocument | null = doc;
@@ -852,7 +858,9 @@ export class BrainStore {
       slugs.push(pred);
       cursor = await BrainEntry.findOne({ slug: pred });
     }
-    return slugs;
+    const identity = cursor?.source && !(RESERVED_LINEAGE_SYSTEMS as readonly string[]).includes(cursor.source.system) ? cursor.source : null;
+    const imported = identity ? (await this.importedVersions(identity))?.slugs ?? [] : [];
+    return [...new Set([...slugs, ...imported])].filter((slug) => slug !== doc.slug);
   }
 
   /**
