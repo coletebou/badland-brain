@@ -1266,6 +1266,26 @@ describe('BrainStore', () => {
     await expect(store.retireObsoleteParts(importer, { system, externalId: 'day.md#part-3' }, 2)).rejects.toBeInstanceOf(BrainInputError);
   });
 
+  it('retires the correction of a part whose retired original was forgotten by slug, when the item no longer has it', async () => {
+    const system = 'openclaw-workspace';
+    const importer = { agent: 'importer:ops', originClass: 'agent' as const };
+    const put = async (externalId: string, body: string, parts?: number): Promise<number> => {
+      await store.note(importer, { title: externalId, body, kind: 'memory', source: { system, externalId } });
+      return store.retireObsoleteParts(importer, { system, externalId }, parts);
+    };
+    await put('week.md#part-1', 'the week, part one', 2);
+    await put('week.md#part-2', 'the week, part two', 2);
+    const second = (await BrainEntry.findOne({ 'source.externalId': 'week.md#part-2' }))!;
+    const corrected = await store.supersede(actor, second.slug, { body: 'the week, part two, corrected', reason: 'fix', expectedHash: second.contentHash });
+    // The retired original is forgotten by slug; its correction is still the part's current text.
+    expect(await store.forget(actor, { slug: second.slug }, 'tidy')).toEqual({ forgotten: 1 });
+    expect(await store.get(corrected.slug)).not.toBeNull();
+    // The item fits in one entry again: every part goes, the second one's correction with it.
+    expect(await put('week.md', 'the week, short')).toBe(2);
+    expect(await store.get(corrected.slug)).toBeNull();
+    expect(index.fts('"corrected"', { scopes: ['core'] }, 5)).toHaveLength(0);
+  });
+
   it('windows long bodies on get', async () => {
     const body = 'x'.repeat(9000);
     const { entry } = await store.note(actor, { title: 'Long', body, kind: 'doc' });

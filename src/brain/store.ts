@@ -590,10 +590,11 @@ export class BrainStore {
       throw new BrainInputError('parts is set only on an item whose externalId ends in #part-<k>, with k from 1 to parts');
     }
     const base = part ? source.externalId.slice(0, part.index) : source.externalId;
+    // Forgotten identities count too: a part's original forgotten by slug can still have a live correction, which
+    // forget() reaches through it (and an identity with nothing left to forget adds nothing to the count).
     const family: string[] = await BrainEntry.distinct('source.externalId', {
       'source.system': source.system,
       'source.externalId': { $regex: `^${escapeRegex(base)}(?:#part-\\d+)?$` },
-      forgotten: { $exists: false },
     });
     const obsolete = family.filter((externalId) => {
       // A part of this base carries the suffix right after it; the base itself may end in a lookalike.
