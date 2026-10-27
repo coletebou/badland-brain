@@ -37,37 +37,38 @@ export interface EvalResult { mode: 'offline' | 'live'; model: string; abstainTh
 /** The abstain threshold for an embedding model: its own entry, else the default. */
 export const abstainThresholdFor = (model: string): number => GOLDEN.abstainThreshold[model] ?? GOLDEN.abstainThreshold.default;
 
-async function seedFixtures(store: BrainStore): Promise<Map<string, string>> {
+async function seedFixtures(store: BrainStore): Promise<Map<string, string[]>> {
   const actor = { agent: 'eval', originClass: 'agent' as const };
-  const slugs = new Map<string, string>();
+  const slugs = new Map<string, string[]>();
   for (const note of FIXTURES) {
     const { entry } = await store.note(actor, { title: note.title, body: note.body, kind: note.kind, tags: note.tags, source: { system: EVAL_SOURCE, externalId: note.slug } });
-    slugs.set(note.slug, entry.slug);
+    slugs.set(note.slug, [entry.slug]);
   }
   for (const note of FIXTURES.filter((n) => n.supersededBy)) {
-    const old = await store.get(slugs.get(note.slug) ?? '');
+    const old = await store.get(slugs.get(note.slug)?.[0] ?? '');
     const next = FIXTURES.find((n) => n.slug === note.supersededBy);
     if (old && next) {
       // The successor already exists with this body, so the supersede folds `old` into it and returns it.
       const replaced = await store.supersede(actor, old.slug, { body: next.body, reason: 'eval supersession', expectedHash: old.contentHash, title: next.title });
-      slugs.set(next.slug, replaced.slug);
+      slugs.set(next.slug, [replaced.slug]);
     }
   }
   return slugs;
 }
 
 /**
- * Live mode: the golden set names fixtures by id, so each id is resolved to the slug of the entry carrying that
- * fixture's import identity (`eval/<id>`) in the live store. Missing ids stop the run, instead of fixture ids being
- * scored as slug prefixes and every correct hit being reported as a miss.
+ * Live mode: the golden set names fixtures by id, so each id is resolved to the entries carrying that fixture's
+ * import identity (`eval/<id>`) in the live store, every version of it: seeding a superseded fixture again records a
+ * newer, never-current alias under its id, and a leak of the retired original must still count. Missing ids stop
+ * the run, instead of fixture ids being scored as slug prefixes and every correct hit being reported as a miss.
  */
-async function resolveFixtureSlugs(): Promise<Map<string, string>> {
-  const slugs = new Map<string, string>();
+async function resolveFixtureSlugs(): Promise<Map<string, string[]>> {
+  const slugs = new Map<string, string[]>();
   const missing: string[] = [];
   for (const note of FIXTURES) {
-    const doc = await BrainEntry.findOne({ forgotten: { $exists: false }, 'source.system': EVAL_SOURCE, 'source.externalId': note.slug }).sort({ createdAt: -1 }).select('slug').lean();
-    if (doc) {
-      slugs.set(note.slug, doc.slug);
+    const docs = await BrainEntry.find({ forgotten: { $exists: false }, 'source.system': EVAL_SOURCE, 'source.externalId': note.slug }).sort({ createdAt: 1 }).select('slug').lean();
+    if (docs.length > 0) {
+      slugs.set(note.slug, docs.map((doc) => doc.slug));
     } else {
       missing.push(note.slug);
     }
@@ -78,9 +79,9 @@ async function resolveFixtureSlugs(): Promise<Map<string, string>> {
   return slugs;
 }
 
-async function ask(deps: SearchDeps, slugMap: Map<string, string>): Promise<QuestionOutcome[]> {
+async function ask(deps: SearchDeps, slugMap: Map<string, string[]>): Promise<QuestionOutcome[]> {
   const threshold = abstainThresholdFor(deps.embedder.model);
-  const remap = (prefixes: string[]): string[] => prefixes.map((p) => slugMap.get(p) ?? p);
+  const remap = (prefixes: string[]): string[] => prefixes.flatMap((p) => slugMap.get(p) ?? [p]);
   const outcomes: QuestionOutcome[] = [];
   for (const question of GOLDEN.questions) {
     const hits = await searchBrain(deps, 'eval', { query: question.question, kinds: question.kinds, topK: 5, includeSuperseded: false });
