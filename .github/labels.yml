@@ -1,0 +1,46 @@
+# The repository's labels: name, color (hex, no #) and description. Applied with the shared GitHub kit's sync script.
+- name: bug
+  color: d73a4a
+  description: Something does not work as documented
+- name: enhancement
+  color: a2eeef
+  description: A new feature or a change to an existing one
+- name: documentation
+  color: 0075ca
+  description: README, docs/design.md and the other guides
+- name: security
+  color: b60205
+  description: Keys, roles, namespace confinement, the secret gate, or what is logged
+- name: good first issue
+  color: 7057ff
+  description: A small, well-scoped change for a first contribution
+- name: help wanted
+  color: 008672
+  description: A change the maintainer would welcome help with
+- name: question
+  color: d876e3
+  description: Further information is requested
+- name: duplicate
+  color: cfd3d7
+  description: This issue or pull request already exists
+- name: wontfix
+  color: ffffff
+  description: This will not be worked on
+- name: "area: store"
+  color: c5def5
+  description: MongoDB entries, tiers, supersede, forget and lineage
+- name: "area: index"
+  color: c5def5
+  description: The SQLite index, chunking, embeddings and reindex
+- name: "area: search"
+  color: c5def5
+  description: Hybrid search, ranking and brain_context
+- name: "area: mcp"
+  color: c5def5
+  description: The MCP tools, the REST API and keys
+- name: "area: importers"
+  color: c5def5
+  description: The import framework and the importers
+- name: "area: integrations"
+  color: c5def5
+  description: The Drover plugin and other integrations

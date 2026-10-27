@@ -30,6 +30,11 @@ Tests that need MongoDB start their own in-memory server through `src/test-suppo
 `src/test-support/brain.ts` gives the small fake-embedder configuration most tests use. The Drover
 plugin's tests live in `integrations/drover/test/` and run with `npm test`.
 
+## Issues and pull requests
+
+Open an issue with the bug or feature form; report vulnerabilities privately, as [SECURITY.md](SECURITY.md)
+describes. A pull request fills in the template's Summary, Testing and Evidence sections.
+
 ## Commits
 
 [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `docs:`, `test:`,

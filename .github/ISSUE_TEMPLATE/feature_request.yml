@@ -1,0 +1,36 @@
+name: Feature request
+description: Suggest a change or an addition to badland-brain.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you are trying to do, and what gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you propose
+      description: How it could work. Note anything it changes about keys, provenance or the curated tier.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Store (entries, tiers, supersede, forget)
+        - Index and search
+        - MCP tools or REST API
+        - Keys and auth
+        - Importers
+        - Drover integration
+        - Docker, Compose or packaging
+        - Docs
+        - Not sure

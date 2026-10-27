@@ -1,0 +1,68 @@
+name: Bug report
+description: Something in badland-brain does not work as the README or docs/design.md says.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Security problems (a way around keys, roles, namespaces or the secret gate) go
+        through the private channel in SECURITY.md, not here.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Commands or tool calls, in order. Synthetic data is best.
+      placeholder: |
+        1. badland-brain serve with BRAIN_EMBED_PROVIDER=fake
+        2. brain_note with ...
+        3. brain_search for ...
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Store (entries, tiers, supersede, forget)
+        - Index and search
+        - MCP tools or REST API
+        - Keys and auth
+        - Importers
+        - Drover integration
+        - Docker, Compose or packaging
+        - Docs
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The output of `badland-brain --version`, or the commit you run.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Node.js version, how you run it (Docker Compose, a checkout), MongoDB version, embedding provider and model.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: The server's JSON log lines around the problem. They never carry keys, bodies or queries, but check before pasting.
+      render: shell
+  - type: checkboxes
+    id: hygiene
+    attributes:
+      label: Before you submit
+      options:
+        - label: This report holds no keys, tokens, or private notes and memories.
+          required: true
