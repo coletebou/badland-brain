@@ -732,13 +732,25 @@ export class BrainStore {
     if (!doc || doc.forgotten || !isVisible(doc.namespace, visibility)) {
       return null;
     }
+    // Every version this one replaced, nearest first and, within a step, newest retirement first: a fold gives an entry
+    // several predecessors, so each branch is followed, up to 10 versions in all.
     const history: BrainEntryRead['history'] = [];
-    let cursor: IBrainEntryDocument | null = doc;
-    for (let depth = 0; depth < 10 && cursor; depth++) {
-      cursor = await BrainEntry.findOne({ supersededBy: cursor._id });
-      // A forgotten (or, for a confined key, invisible) version is unreadable, so it is not listed; the walk still passes through it to older ones.
-      if (cursor && !cursor.forgotten && isVisible(cursor.namespace, visibility)) {
-        history.push({ slug: cursor.slug, invalidAt: cursor.invalidAt ? cursor.invalidAt.toISOString() : null });
+    const seen = new Set([doc._id.toString()]);
+    let frontier: Types.ObjectId[] = [doc._id];
+    for (let visited = 0; frontier.length > 0 && visited < 10;) {
+      const versions = await BrainEntry.find({ supersededBy: { $in: frontier } }).sort({ invalidAt: -1, _id: -1 }).limit(10 - visited);
+      frontier = [];
+      for (const version of versions) {
+        if (seen.has(version._id.toString())) {
+          continue;
+        }
+        seen.add(version._id.toString());
+        visited += 1;
+        // A forgotten (or, for a confined key, invisible) version is unreadable, so it is not listed; the walk still passes through it to older ones.
+        if (!version.forgotten && isVisible(version.namespace, visibility)) {
+          history.push({ slug: version.slug, invalidAt: version.invalidAt ? version.invalidAt.toISOString() : null });
+        }
+        frontier.push(version._id);
       }
     }
     const start = Math.max(0, Math.min(offset, doc.body.length));

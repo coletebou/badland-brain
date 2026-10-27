@@ -1286,6 +1286,17 @@ describe('BrainStore', () => {
     expect(index.fts('"corrected"', { scopes: ['core'] }, 5)).toHaveLength(0);
   });
 
+  it('lists every version folded into an entry in its history, nearest first and newest retirement first', async () => {
+    const twin = await store.note(actor, { title: 'Port', body: 'the port is 4310', kind: 'memory' });
+    const a = await store.note(actor, { title: 'Old A', body: 'the port is 4300', kind: 'memory' });
+    const b = await store.note(actor, { title: 'Old B', body: 'the port might be 4305', kind: 'memory' });
+    const older = await store.supersede(actor, a.entry.slug, { body: 'the port is probably 4300', reason: 'hedge', expectedHash: a.entry.contentHash });
+    // Two different entries corrected to the twin's body both fold into it, so it has two predecessors.
+    await store.supersede(actor, older.slug, { body: 'the port is 4310', reason: 'moved', expectedHash: older.contentHash });
+    await store.supersede(actor, b.entry.slug, { body: 'the port is 4310', reason: 'moved', expectedHash: b.entry.contentHash });
+    expect((await store.get(twin.entry.slug))?.history.map((h) => h.slug)).toEqual([b.entry.slug, older.slug, a.entry.slug]);
+  });
+
   it('windows long bodies on get', async () => {
     const body = 'x'.repeat(9000);
     const { entry } = await store.note(actor, { title: 'Long', body, kind: 'doc' });
