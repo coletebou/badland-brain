@@ -40,6 +40,7 @@ describe('findSecretShapes', () => {
     expect(findSecretShapes(`npm_${'k'.repeat(36)}`)).toEqual(['npm-token']);
     expect(findSecretShapes(`${'sk'}_live_${'k'.repeat(24)}`)).toEqual(['stripe-key']);
     expect(findSecretShapes(`xoxb-${'1'.repeat(12)}`)).toEqual(['slack-token']);
+    expect(findSecretShapes(`SLACK_APP_TOKEN=xapp-1-${'A'.repeat(11)}-${'1'.repeat(13)}`)).toEqual(['slack-token']);
   });
 
   it('is stable across repeated calls (no global regex state)', () => {
