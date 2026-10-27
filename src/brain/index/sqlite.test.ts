@@ -1,4 +1,4 @@
-import { mkdtempSync } from 'node:fs';
+import { chmodSync, mkdtempSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -14,6 +14,22 @@ const row = (over: Partial<IndexEntryRow> = {}): IndexEntryRow => ({
   ...over,
 });
 const tempDb = (): string => join(mkdtempSync(join(tmpdir(), 'brain-')), 'b.sqlite');
+
+describe('index file permissions', () => {
+  it.skipIf(process.platform === 'win32')('creates the index and its directory for the owner alone, and tightens an existing file', () => {
+    const dir = join(mkdtempSync(join(tmpdir(), 'brain-perm-')), 'data');
+    const path = join(dir, 'brain.sqlite');
+    const index = openBrainIndex({ path, identity });
+    index.upsertEntry({ entryId: 'e1', slug: 's', title: 't', tags: '', kind: 'memory', scope: 'core', tier: 'episodic', namespace: 'shared', originClass: 'agent', authorAgent: 'a', importance: 5, validFromMs: 0, invalidAtMs: null, updatedAtMs: 1 }, []);
+    expect(statSync(dir).mode & 0o777).toBe(0o700);
+    expect(statSync(path).mode & 0o777).toBe(0o600);
+    expect(statSync(`${path}-wal`).mode & 0o777).toBe(0o600);
+    index.close();
+    chmodSync(path, 0o644);
+    openBrainIndex({ path, identity }).close();
+    expect(statSync(path).mode & 0o777).toBe(0o600);
+  });
+});
 
 describe('BrainIndex', () => {
   afterEach(() => vi.restoreAllMocks());

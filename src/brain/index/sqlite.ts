@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 
@@ -424,10 +424,27 @@ function loadSqlite(): SqliteModule {
   return sqlite;
 }
 
+/**
+ * The index holds verbatim chunks of every entry, so it is the owner's alone: a directory created for it is 0700, the
+ * file is created 0600 (SQLite gives its -wal and -shm files the database file's mode) and an existing one is
+ * tightened to 0600.
+ */
+function privateFile(path: string): void {
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+  writeFileSync(path, '', { flag: 'a', mode: 0o600 });
+  if (process.platform !== 'win32' && (statSync(path).mode & 0o077) !== 0) {
+    try {
+      chmodSync(path, 0o600);
+    } catch {
+      // Not the file's owner: leave it as it is.
+    }
+  }
+}
+
 export function openBrainIndex(opts: { path: string; identity: IndexIdentity }): BrainIndex {
   const { DatabaseSync } = loadSqlite();
   if (opts.path !== ':memory:') {
-    mkdirSync(dirname(opts.path), { recursive: true });
+    privateFile(opts.path);
   }
   const db = new DatabaseSync(opts.path, { allowExtension: true });
   sqliteVec.load(db);
