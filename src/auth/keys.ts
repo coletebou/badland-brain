@@ -11,7 +11,7 @@
  * and writes outside them are refused.
  */
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 import { z } from 'zod';
@@ -214,25 +214,65 @@ export function writeKeysFile(file: string, records: KeyRecord[]): void {
   renameSync(temp, file);
 }
 
-export function addKey(file: string, record: KeyRecord): void {
-  const records = readKeysFile(file);
-  if (records.some((existing) => existing.name === record.name)) {
-    throw new Error(`a key named ${record.name} already exists; revoke it first or choose another name`);
+/** How long a key command waits for another one to finish with the keys file. */
+const KEYS_LOCK_WAIT_MS = 5_000;
+const sleepSync = (ms: number): void => { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); };
+
+/**
+ * Run a read-modify-write of the keys file holding an exclusive lock file beside it, so two key commands never write
+ * back each other's stale view: a mint that read the file before a concurrent revoke landed would otherwise restore the
+ * revoked key. Readers need no lock, since every write is an atomic rename. A lock left by a command that was killed
+ * outright is reported, not broken (as git does with its own): its age or process id cannot tell a dead command from
+ * one running in another container that shares the data directory.
+ */
+function withKeysFileLock<T>(file: string, update: () => T, waitMs = KEYS_LOCK_WAIT_MS): T {
+  mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
+  const lock = `${file}.lock`;
+  const deadline = Date.now() + waitMs;
+  for (;;) {
+    try {
+      closeSync(openSync(lock, 'wx', 0o600));
+      break;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+        throw error;
+      }
+      if (Date.now() >= deadline) {
+        throw new Error(`another keys command holds ${lock}; if none is running, remove that file and retry`);
+      }
+      sleepSync(20);
+    }
   }
-  writeKeysFile(file, [...records, record]);
+  try {
+    return update();
+  } finally {
+    rmSync(lock, { force: true });
+  }
+}
+
+export function addKey(file: string, record: KeyRecord, opts: { lockWaitMs?: number } = {}): void {
+  withKeysFileLock(file, () => {
+    const records = readKeysFile(file);
+    if (records.some((existing) => existing.name === record.name)) {
+      throw new Error(`a key named ${record.name} already exists; revoke it first or choose another name`);
+    }
+    writeKeysFile(file, [...records, record]);
+  }, opts.lockWaitMs);
 }
 
 /** Remove the keys whose id matches, or whose name matches when the name is unique. Returns what was removed. */
-export function revokeKey(file: string, idOrName: string): KeyRecord[] {
-  const records = readKeysFile(file);
-  const byId = records.filter((record) => record.id === idOrName);
-  const byName = records.filter((record) => record.name === idOrName);
-  if (byId.length === 0 && byName.length > 1) {
-    throw new Error(`${byName.length} keys are named ${idOrName}; revoke one by id`);
-  }
-  const removed = byId.length > 0 ? byId : byName;
-  if (removed.length > 0) {
-    writeKeysFile(file, records.filter((record) => !removed.includes(record)));
-  }
-  return removed;
+export function revokeKey(file: string, idOrName: string, opts: { lockWaitMs?: number } = {}): KeyRecord[] {
+  return withKeysFileLock(file, () => {
+    const records = readKeysFile(file);
+    const byId = records.filter((record) => record.id === idOrName);
+    const byName = records.filter((record) => record.name === idOrName);
+    if (byId.length === 0 && byName.length > 1) {
+      throw new Error(`${byName.length} keys are named ${idOrName}; revoke one by id`);
+    }
+    const removed = byId.length > 0 ? byId : byName;
+    if (removed.length > 0) {
+      writeKeysFile(file, records.filter((record) => !removed.includes(record)));
+    }
+    return removed;
+  }, opts.lockWaitMs);
 }

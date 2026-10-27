@@ -1,4 +1,4 @@
-import { chmodSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -88,6 +88,25 @@ describe('keys', () => {
     expect(revokeKey(file, 'missing')).toEqual([]);
     expect(readKeysFile(file)).toEqual([]);
     expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({ version: 1, keys: [] });
+  });
+
+  it('serializes key commands on a lock beside the file, so a mint never writes back a revoked key', () => {
+    const file = tempFile();
+    const a = mintKey({ name: 'a', role: 'read' });
+    addKey(file, a.record);
+    expect(existsSync(`${file}.lock`)).toBe(false);
+    // Another command holds the lock: both mutators wait for it, then give up without touching the file.
+    writeFileSync(`${file}.lock`, '');
+    const before = readFileSync(file, 'utf8');
+    expect(() => addKey(file, mintKey({ name: 'b', role: 'read' }).record, { lockWaitMs: 60 })).toThrow(/another keys command holds .*keys\.json\.lock/u);
+    expect(() => revokeKey(file, 'a', { lockWaitMs: 60 })).toThrow(/another keys command holds/u);
+    expect(readFileSync(file, 'utf8')).toBe(before);
+    // Once it is released they proceed, and leave no lock behind, even when the update itself fails.
+    rmSync(`${file}.lock`);
+    expect(revokeKey(file, 'a').map((r) => r.name)).toEqual(['a']);
+    addKey(file, a.record);
+    expect(() => addKey(file, mintKey({ name: 'a', role: 'read' }).record)).toThrow(/already exists/u);
+    expect(existsSync(`${file}.lock`)).toBe(false);
   });
 
   it('still loads a group-readable file, warning about its permissions', () => {

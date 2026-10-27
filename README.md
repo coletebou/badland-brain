@@ -255,7 +255,9 @@ Statuses: 400 bad input, 401 missing or unknown key, 403 a key whose role may no
 write gate) recognise one. Only its SHA-256 is stored; `keys mint` prints the key once and never
 again. Keys are compared in constant time, can expire, and are revoked by deleting their record.
 The keys file is written atomically with mode 0600 (a directory it creates is 0700), re-read
-whenever it changes, and the server warns when other users can read it. A keys file that cannot be parsed
+whenever it changes, and the server warns when other users can read it. Key commands hold
+`keys.json.lock` beside it while they update it, so a mint and a revoke at once never undo each
+other; a command killed outright leaves that lock behind, and the next one says to remove it. A keys file that cannot be parsed
 **fails closed**: none of its keys work until it is fixed. `BRAIN_KEYS` can hold the records
 instead, for deployments that keep secrets in the environment; an invalid value stops the server
 from starting. The CLI reads the owner key from `BRAIN_KEY` or `BRAIN_KEY_FILE`, never from its
