@@ -1140,6 +1140,37 @@ describe('BrainStore', () => {
     expect(index.knn(await embedder.embedQuery(embedder.queryInput('field_1')), { scopes: ['core'] }, 5)).toHaveLength(1);
   });
 
+  it('retires the parts an import item no longer has, whichever way it crosses the size limit', async () => {
+    const system = 'openclaw-workspace';
+    const importer = { agent: 'importer:ops', originClass: 'agent' as const };
+    const put = async (externalId: string, body: string, parts?: number): Promise<number> => {
+      await store.note(importer, { title: externalId, body, kind: 'memory', source: { system, externalId } });
+      return store.retireObsoleteParts(importer, { system, externalId }, parts);
+    };
+    const live = async (): Promise<string[]> => (await BrainEntry.find({ 'source.system': system, live: true }).lean()).map((e) => e.source?.externalId ?? '').sort();
+    // A whole item grows past the limit: its first part retires the whole-item identity.
+    await put('day.md', 'the day, short');
+    expect(await put('day.md#part-1', 'the day, part one', 3)).toBe(1);
+    await put('day.md#part-2', 'the day, part two', 3);
+    await put('day.md#part-3', 'the day, part three', 3);
+    expect(await live()).toEqual(['day.md#part-1', 'day.md#part-2', 'day.md#part-3']);
+    // It shrinks to two parts after an agent corrected the third: the third goes, its correction with it.
+    const third = (await BrainEntry.findOne({ 'source.externalId': 'day.md#part-3' }))!;
+    await store.supersede(actor, third.slug, { body: 'the day, part three, corrected', reason: 'fix', expectedHash: third.contentHash });
+    expect(await put('day.md#part-1', 'the day, part one', 2)).toBe(2);
+    expect(await put('day.md#part-2', 'the day, part two', 2)).toBe(0);
+    expect(await live()).toEqual(['day.md#part-1', 'day.md#part-2']);
+    expect(index.fts('"corrected"', { scopes: ['core'] }, 5)).toHaveLength(0);
+    // It shrinks back under the limit: the whole item retires every part.
+    expect(await put('day.md', 'the day, short again')).toBe(2);
+    expect(await live()).toEqual(['day.md']);
+    // A whole item whose own id ends like a part is not one, but a real part of it still retires it.
+    expect(await put('notes#part-2', 'a file named like a part')).toBe(0);
+    expect(await put('notes#part-2#part-1', 'that file, grown, part one', 2)).toBe(1);
+    await expect(store.retireObsoleteParts(importer, { system, externalId: 'day.md' }, 2)).rejects.toBeInstanceOf(BrainInputError);
+    await expect(store.retireObsoleteParts(importer, { system, externalId: 'day.md#part-3' }, 2)).rejects.toBeInstanceOf(BrainInputError);
+  });
+
   it('windows long bodies on get', async () => {
     const body = 'x'.repeat(9000);
     const { entry } = await store.note(actor, { title: 'Long', body, kind: 'doc' });

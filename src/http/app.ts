@@ -216,7 +216,7 @@ export function createApp(deps: AppDeps): express.Express {
       return;
     }
     const actor = { agent: importerAgent(keyOf(res).name), originClass: args.originClass };
-    const summary = { created: 0, skipped: 0, rejected: [] as Array<{ externalId: string; error: string }> };
+    const summary = { created: 0, skipped: 0, retired: 0, rejected: [] as Array<{ externalId: string; error: string }> };
     for (const item of args.items) {
       try {
         const capturedAt = item.capturedAt ? new Date(item.capturedAt) : undefined;
@@ -228,6 +228,12 @@ export function createApp(deps: AppDeps): express.Express {
       } catch (error) {
         if ((error as { code?: number }).code === 11000) { summary.skipped += 1; continue; }
         summary.rejected.push({ externalId: item.externalId, error: reasonOf(error) });
+        continue;
+      }
+      try {
+        summary.retired += await runtime.store.retireObsoleteParts(actor, { system: sourceSystem, externalId: item.externalId }, item.parts);
+      } catch (error) {
+        summary.rejected.push({ externalId: item.externalId, error: `written, but the parts it no longer has were not retired: ${reasonOf(error)}` });
       }
     }
     send(res, { ok: true, data: summary });

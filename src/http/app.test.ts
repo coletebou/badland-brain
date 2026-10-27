@@ -178,8 +178,8 @@ describe('the HTTP app', () => {
       { externalId: 'example/b.md', title: 'B', body: 'beta imported text', kind: 'reference' },
     ];
     const first = await call(keys.owner.raw, 'POST', '/api/import', { originClass: 'owner', items }, { 'x-brain-source': 'claude-memory' });
-    expect(await data(first)).toEqual({ created: 2, skipped: 0, rejected: [] });
-    expect(await data(await call(keys.owner.raw, 'POST', '/api/import', { originClass: 'owner', items }, { 'x-brain-source': 'claude-memory' }))).toEqual({ created: 0, skipped: 2, rejected: [] });
+    expect(await data(first)).toEqual({ created: 2, skipped: 0, retired: 0, rejected: [] });
+    expect(await data(await call(keys.owner.raw, 'POST', '/api/import', { originClass: 'owner', items }, { 'x-brain-source': 'claude-memory' }))).toEqual({ created: 0, skipped: 2, retired: 0, rejected: [] });
     const listed = await data<{ items: Array<{ originClass: string; authorAgent: string }> }>(await call(keys.agent.raw, 'GET', '/api/entries?namespace=repo:imported'));
     expect(listed.items).toEqual([expect.objectContaining({ originClass: 'owner', authorAgent: 'importer:owner@laptop' })]);
     expect((await call(keys.owner.raw, 'POST', '/api/import', { originClass: 'system', items })).status).toBe(400);
@@ -213,12 +213,23 @@ describe('the HTTP app', () => {
     ];
     const importer: Importer = { source: 'openclaw-workspace', async *scan() { yield* items; } };
     const sink = createApiSink({ origin: base, key: keys.owner.raw });
-    expect(await runImport(importer, sink, { paths: [], dryRun: false })).toEqual({ scanned: 3, excluded: 0, split: 1, created: 4, skipped: 0, rejected: 1 });
-    expect(await runImport(importer, sink, { paths: [], dryRun: false })).toEqual({ scanned: 3, excluded: 0, split: 1, created: 0, skipped: 4, rejected: 1 });
+    expect(await runImport(importer, sink, { paths: [], dryRun: false })).toEqual({ scanned: 3, excluded: 0, split: 1, created: 4, skipped: 0, retired: 0, rejected: 1 });
+    expect(await runImport(importer, sink, { paths: [], dryRun: false })).toEqual({ scanned: 3, excluded: 0, split: 1, created: 0, skipped: 4, retired: 0, rejected: 1 });
     const parts = (await BrainEntry.find({ 'source.system': 'openclaw-workspace', live: true, 'source.externalId': /#part-/u }).lean())
       .sort((a, b) => (a.source?.externalId ?? '').localeCompare(b.source?.externalId ?? ''));
     expect(parts.map((entry) => entry.title)).toEqual([1, 2, 3].map((n) => `helper-bot notes 2026-10-01 (part ${n}/3)`));
     expect(parts.map((entry) => entry.body).join('')).toBe(day);
+
+    const liveParts = async (): Promise<string[]> => (await BrainEntry.find({ 'source.system': 'openclaw-workspace', live: true, 'source.externalId': /^helper-bot\/memory\/2026-10-01\.md/u }).lean())
+      .map((entry) => entry.source?.externalId ?? '').sort();
+    // The day shrinks to two parts: the third is retired, and nothing of it stays current.
+    items[0] = { ...items[0], body: day.slice(0, 130_000) };
+    expect(await runImport(importer, sink, { paths: [], dryRun: false })).toMatchObject({ split: 1, retired: 1, rejected: 1 });
+    expect(await liveParts()).toEqual([1, 2].map((n) => `helper-bot/memory/2026-10-01.md#part-${n}`));
+    // It shrinks under the limit: the whole item retires both parts, counted in entries (part 2 with the version it had as one of three).
+    items[0] = { ...items[0], body: 'a short day after all' };
+    expect(await runImport(importer, sink, { paths: [], dryRun: false })).toMatchObject({ split: 0, created: 1, retired: 3, rejected: 1 });
+    expect(await liveParts()).toEqual(['helper-bot/memory/2026-10-01.md']);
   });
 
   it('meters requests and writes per key, answering 429 with Retry-After', async () => {

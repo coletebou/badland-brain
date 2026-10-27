@@ -63,6 +63,9 @@ type CreateFields = Omit<IBrainEntry, 'slug' | 'live' | 'createdAt' | 'updatedAt
 
 const NEEDS_REVIEW_TAG = 'needs-review';
 const DUPLICATE_KEY = 11000;
+/** The identity suffix the importers give each part of an item split for size. */
+const PART_SUFFIX = /#part-(\d+)$/u;
+const escapeRegex = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
 
 const isDuplicateKey = (error: unknown, field: string): boolean => {
   const { code, keyPattern } = error as { code?: number; keyPattern?: Record<string, number> };
@@ -550,6 +553,40 @@ export class BrainStore {
       validFrom: at, invalidAt: at, expiredAt: at, live: false, supersededBy: twin._id, contentHash, source,
     });
     await this.indexEntry(alias);
+  }
+
+  /**
+   * After an import item is written: forget the identities of that item it no longer has. An item too long for one
+   * entry travels as parts `<id>#part-<k>` of `parts`; part k of n retires the whole-item identity and any part after
+   * n, and a whole item (no `parts`) retires every part, so a file that shrinks, or crosses the size limit either way,
+   * leaves no stale text current. Each is forgotten by its import identity, corrections of it included. Returns how
+   * many entries were forgotten.
+   */
+  async retireObsoleteParts(actor: BrainActor, source: { system: string; externalId: string }, parts?: number): Promise<number> {
+    const part = parts === undefined ? null : PART_SUFFIX.exec(source.externalId);
+    if (parts !== undefined && (!part || Number(part[1]) < 1 || Number(part[1]) > parts)) {
+      throw new BrainInputError('parts is set only on an item whose externalId ends in #part-<k>, with k from 1 to parts');
+    }
+    const base = part ? source.externalId.slice(0, part.index) : source.externalId;
+    const family: string[] = await BrainEntry.distinct('source.externalId', {
+      'source.system': source.system,
+      'source.externalId': { $regex: `^${escapeRegex(base)}(?:#part-\\d+)?$` },
+      forgotten: { $exists: false },
+    });
+    const obsolete = family.filter((externalId) => {
+      // A part of this base carries the suffix right after it; the base itself may end in a lookalike.
+      const member = PART_SUFFIX.exec(externalId);
+      const memberPart = member !== null && member.index === base.length ? Number(member[1]) : null;
+      if (part === null) {
+        return memberPart !== null;
+      }
+      return memberPart === null ? externalId === base : memberPart > Number(parts);
+    });
+    let forgotten = 0;
+    for (const externalId of obsolete) {
+      forgotten += (await this.forget(actor, { source: { system: source.system, externalId } }, 'the import no longer has this part')).forgotten;
+    }
+    return forgotten;
   }
 
   async supersede(

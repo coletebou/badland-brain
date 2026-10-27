@@ -48,7 +48,7 @@ describe('import framework', () => {
       item({ externalId: 'e', namespace: 'repo:client-x' }),
     ]);
     const summary = await runImport(importer, sink, { paths: [], dryRun: false, exclude: buildExcludeMatcher(['acme', 'client-x']) });
-    expect(summary).toEqual({ scanned: 5, excluded: 2, split: 0, created: 2, skipped: 0, rejected: 1 });
+    expect(summary).toEqual({ scanned: 5, excluded: 2, split: 0, created: 2, skipped: 0, retired: 0, rejected: 1 });
     expect(calls.map((c) => [c.originClass, c.ids])).toEqual([['agent', ['a']], ['owner', ['d']]]);
     // No terms, nothing excluded: there are no built-in exclusions.
     const none = await runImport(stubImporter([item({ externalId: 'b', path: '/srv/notes/acme/x.md' })]), sink, { paths: [], dryRun: false });
@@ -78,7 +78,7 @@ describe('import framework', () => {
     }) as typeof fetch;
     const sink = createApiSink({ origin: 'https://brain.example', key: 'bbk_test', fetchImpl });
     const result = await sink.put('claude-memory', 'agent', [item({ externalId: 'a' }), item({ externalId: 'b' })]);
-    expect(result).toEqual({ created: 1, skipped: 1, rejected: [] });
+    expect(result).toEqual({ created: 1, skipped: 1, retired: 0, rejected: [] });
     expect(requests[0].url).toBe('https://brain.example/api/import');
     expect(requests[0].headers['x-brain-source']).toBe('claude-memory');
     expect((requests[0].body as { originClass: string; items: unknown[] }).items).toHaveLength(2);
@@ -173,7 +173,7 @@ describe('oversize import items', () => {
     expect(IMPORT_PART_CHARS).toBeLessThan(MAX_BODY_CHARS);
     expect(parts.map((p) => p.body).join('')).toBe(body);
     for (const part of parts) {
-      expect(part).toEqual({ ...original, externalId: part.externalId, title: part.title, body: part.body });
+      expect(part).toEqual({ ...original, externalId: part.externalId, title: part.title, body: part.body, parts: 3 });
     }
     // Deterministic, so a re-import posts the same identities with the same bodies.
     expect(splitOversize({ ...original })).toEqual(parts);
@@ -251,7 +251,7 @@ describe('oversize import items', () => {
     const summary = await runImport(importer, sink, { paths: [], dryRun: false, batchSize: 2, log: (line) => logs.push(line) });
     expect(received.every((i) => i.body.length <= MAX_BODY_CHARS)).toBe(true);
     expect(received.map((i) => i.externalId)).toEqual(['before', 'big#part-1', 'big#part-2', 'big#part-3', 'after']);
-    expect(summary).toEqual({ scanned: 3, excluded: 0, split: 1, created: 5, skipped: 0, rejected: 0 });
+    expect(summary).toEqual({ scanned: 3, excluded: 0, split: 1, created: 5, skipped: 0, retired: 0, rejected: 0 });
     expect(logs).toContain(`split big (${body.length} chars) into 3 parts`);
   });
 
@@ -278,7 +278,7 @@ describe('oversize import items', () => {
     const importer = stubImporter([item({ externalId: 'straddled', body: straddled }), item({ externalId: 'pem', body: headerCut }), item({ externalId: 'clean' })]);
     const summary = await runImport(importer, sink, { paths: [], dryRun: false, log: (line) => logs.push(line) });
     expect(received).toEqual(['clean']);
-    expect(summary).toEqual({ scanned: 3, excluded: 0, split: 0, created: 1, skipped: 0, rejected: 2 });
+    expect(summary).toEqual({ scanned: 3, excluded: 0, split: 0, created: 1, skipped: 0, retired: 0, rejected: 2 });
     expect(logs).toEqual([
       'rejected straddled: body contains a secret-shaped value: brain-api-key',
       'rejected pem: body contains a secret-shaped value: private-key',

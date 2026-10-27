@@ -99,7 +99,15 @@ export const brainImportItemSchema = z.object({
   importance: z.number().int().min(1).max(10).optional(),
   capturedAt: isoDate.optional(),
   path: z.string().max(1024).optional(),
-});
+  /** On each part of an item split for size: how many parts the item has. */
+  parts: z.number().int().min(2).max(10_000).optional(),
+}).refine((item) => {
+  if (item.parts === undefined) {
+    return true;
+  }
+  const part = /#part-(\d+)$/u.exec(item.externalId);
+  return part !== null && Number(part[1]) >= 1 && Number(part[1]) <= item.parts;
+}, { message: 'parts belongs on an item whose externalId ends in #part-<k>, with k from 1 to parts', path: ['parts'] });
 
 /** Owner only: a bulk import that sets the origin class for every item it carries. */
 export const brainImportSchema = z.object({

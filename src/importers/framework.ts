@@ -16,6 +16,8 @@ export interface ImportItem {
   originClass: 'owner' | 'agent' | 'untrusted';
   capturedAt?: Date;
   path?: string;
+  /** Set on each part of an item split for size (see splitOversize): how many parts the item has now. */
+  parts?: number;
 }
 
 export interface ScanOptions {
@@ -34,6 +36,8 @@ export interface Importer {
 export interface ImportSinkResult {
   created: number;
   skipped: number;
+  /** Entries forgotten because their item no longer has that part (see BrainStore.retireObsoleteParts). */
+  retired?: number;
   rejected: Array<{ externalId: string; error: string }>;
 }
 
@@ -48,6 +52,8 @@ export interface ImportSummary {
   split: number;
   created: number;
   skipped: number;
+  /** Entries forgotten because their item shrank to fewer parts, or crossed the size limit either way. */
+  retired: number;
   rejected: number;
 }
 
@@ -159,8 +165,9 @@ export function splitBody(body: string, maxChars = IMPORT_PART_CHARS): string[] 
 
 /**
  * The import route refuses a whole request when one body is over MAX_BODY_CHARS, so such an item travels as ordered
- * parts: `<externalId>#part-<n>`, titled `<title> (part n/N)`, every other field shared. An item that fits comes back
- * unchanged, keeping the identity its earlier imports used.
+ * parts: `<externalId>#part-<n>`, titled `<title> (part n/N)`, carrying `parts: N`, every other field shared. An item
+ * that fits comes back unchanged, keeping the identity its earlier imports used. The server retires the identities an
+ * item no longer has, so a file that shrinks or crosses the limit leaves no stale part current.
  */
 export function splitOversize(item: ImportItem): ImportItem[] {
   if (item.body.length <= MAX_BODY_CHARS) {
@@ -172,7 +179,7 @@ export function splitOversize(item: ImportItem): ImportItem[] {
     const suffix = ` (part ${i + 1}/${bodies.length})`;
     const room = MAX_TITLE_CHARS - suffix.length;
     const base = title.length > room ? title.slice(0, pairSafeEnd(title, room)).trimEnd() : title;
-    return { ...item, externalId: `${item.externalId}#part-${i + 1}`, title: `${base}${suffix}`, body };
+    return { ...item, externalId: `${item.externalId}#part-${i + 1}`, title: `${base}${suffix}`, body, parts: bodies.length };
   });
 }
 
@@ -195,7 +202,7 @@ export async function runImport(
   const batchSize = opts.batchSize ?? 50;
   const log = opts.log ?? (() => undefined);
   const exclude = opts.exclude ?? (() => false);
-  const summary: ImportSummary = { scanned: 0, excluded: 0, split: 0, created: 0, skipped: 0, rejected: 0 };
+  const summary: ImportSummary = { scanned: 0, excluded: 0, split: 0, created: 0, skipped: 0, retired: 0, rejected: 0 };
   const batches = new Map<ImportItem['originClass'], ImportItem[]>();
 
   const reject = (externalId: string, error: string): void => {
@@ -217,6 +224,7 @@ export async function runImport(
     const result = await sink.put(importer.source, originClass, items);
     summary.created += result.created;
     summary.skipped += result.skipped;
+    summary.retired += result.retired ?? 0;
     for (const rejected of result.rejected) {
       reject(rejected.externalId, rejected.error);
     }
@@ -267,7 +275,7 @@ const MAX_REQUEST_BYTES = 8 * 1024 * 1024;
 
 const toWire = (item: ImportItem) => ({
   externalId: item.externalId, title: item.title, body: item.body, kind: item.kind, tags: item.tags, namespace: item.namespace,
-  capturedAt: item.capturedAt?.toISOString(), path: item.path,
+  capturedAt: item.capturedAt?.toISOString(), path: item.path, parts: item.parts,
 });
 type WireItem = ReturnType<typeof toWire>;
 
@@ -297,7 +305,7 @@ export function createApiSink(options: { origin: string; key: string; fetchImpl?
   };
   return {
     async put(source, originClass, items) {
-      const result: ImportSinkResult = { created: 0, skipped: 0, rejected: [] };
+      const result: ImportSinkResult = { created: 0, skipped: 0, retired: 0, rejected: [] };
       let request: WireItem[] = [];
       let bytes = 0;
       const send = async (): Promise<void> => {
@@ -307,6 +315,7 @@ export function createApiSink(options: { origin: string; key: string; fetchImpl?
         const sent = await post(source, originClass, request);
         result.created += sent.created;
         result.skipped += sent.skipped;
+        result.retired = (result.retired ?? 0) + (sent.retired ?? 0);
         result.rejected.push(...sent.rejected);
         request = [];
         bytes = 0;
@@ -337,18 +346,20 @@ export function createApiSink(options: { origin: string; key: string; fetchImpl?
   };
 }
 
-/** Write straight into a store in this process (tests, and the offline eval). */
+/** Write straight into a store in this process, as the import route does; tests use it. */
 export function createStoreSink(options: { store: BrainStore; agent: string }): ImportSink {
   return {
     async put(source, originClass, items) {
-      const result: ImportSinkResult = { created: 0, skipped: 0, rejected: [] };
+      const result: ImportSinkResult = { created: 0, skipped: 0, retired: 0, rejected: [] };
       for (const item of items) {
         try {
-          const { created } = await options.store.note({ agent: options.agent, originClass }, {
+          const actor = { agent: options.agent, originClass };
+          const { created } = await options.store.note(actor, {
             title: item.title, body: item.body, kind: item.kind, tags: item.tags, namespace: item.namespace, validFrom: item.capturedAt,
             source: { system: source, externalId: item.externalId, path: item.path, capturedAt: item.capturedAt },
           });
           result[created ? 'created' : 'skipped'] += 1;
+          result.retired = (result.retired ?? 0) + await options.store.retireObsoleteParts(actor, { system: source, externalId: item.externalId }, item.parts);
         } catch (error) {
           result.rejected.push({ externalId: item.externalId, error: (error as Error).message.slice(0, 200) });
         }

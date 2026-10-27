@@ -134,6 +134,9 @@ brainEntrySchema.index(
   { 'source.system': 1, 'source.externalId': 1 },
   { unique: true, partialFilterExpression: { live: true, 'source.externalId': { $exists: true } } },
 );
+// Every version under an import identity (or a family of part identities), newest first: the unique index above
+// covers live rows only, so without this one each import item would scan the collection.
+brainEntrySchema.index({ 'source.system': 1, 'source.externalId': 1, createdAt: -1 });
 
 export const BrainEntry: BrainEntryModel = (mongoose.models.BrainEntry as BrainEntryModel | undefined)
   ?? mongoose.model<IBrainEntryDocument, BrainEntryModel>('BrainEntry', brainEntrySchema);
