@@ -2,7 +2,17 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { loadServerConfig } from './config.js';
+import { dotenvValue, loadServerConfig } from './config.js';
+
+describe('dotenvValue', () => {
+  it('reads a value the way a dotenv file writes it: quotes, inline comments, surrounding space', () => {
+    expect(dotenvValue('  bare-value  ')).toBe('bare-value');
+    expect(dotenvValue('bare-value # a comment')).toBe('bare-value');
+    expect(dotenvValue('"quoted-value" # a comment\r')).toBe('quoted-value');
+    expect(dotenvValue("'single-quoted'")).toBe('single-quoted');
+    expect(dotenvValue('"keeps # inside quotes"')).toBe('keeps # inside quotes');
+  });
+});
 
 describe('loadServerConfig', () => {
   it('defaults to loopback, a data directory, and no quota', () => {

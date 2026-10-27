@@ -30,6 +30,16 @@ const positiveInt = (raw: string | undefined, name: string, fallback: number): n
 };
 
 /**
+ * A value as a dotenv file writes it: a quoted value ends at its closing quote, which an inline comment may follow;
+ * an unquoted one ends before ` # comment`.
+ */
+export function dotenvValue(raw: string): string {
+  const value = raw.trim();
+  const quoted = /^(["'])(.*?)\1(?:\s+#.*)?$/u.exec(value);
+  return quoted ? quoted[2] : value.replace(/\s+#.*$/u, '').trim();
+}
+
+/**
  * Every server setting, from the environment. An invalid value is an error that names the variable, never its value;
  * `.env.example` documents each one.
  */

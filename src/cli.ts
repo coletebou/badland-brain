@@ -3,7 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 
 import { KEY_ROLES, type KeyRole, addKey, mintKey, readKeysFile, revokeKey } from './auth/keys.js';
-import { loadServerConfig } from './config.js';
+import { dotenvValue, loadServerConfig } from './config.js';
 import { renderTable } from './eval/score.js';
 import { runLiveEval, runOfflineEval, seedRequests } from './eval/run.js';
 import { claudeMemoryImporter } from './importers/claude-memory.js';
@@ -68,7 +68,7 @@ function ownerKey(): string {
   if (file && existsSync(file)) {
     const text = readFileSync(file, 'utf8');
     const line = [...text.matchAll(/^[ \t]*(?:export[ \t]+)?BRAIN_KEY=(.*)$/gmu)].at(-1)?.[1];
-    const key = (line ?? text).trim().replace(/^["']|["']$/gu, '');
+    const key = dotenvValue(line ?? text);
     if (key) {
       return key;
     }

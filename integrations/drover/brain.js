@@ -44,9 +44,12 @@ export function brainUrl(env = _deps.env) {
 }
 export const mcpUrl = (env = _deps.env) => `${brainUrl(env)}/mcp`;
 
+// A dotenv value: a quoted one ends at its closing quote, which an inline comment may follow; an unquoted one ends
+// before ` # comment`.
 const unquote = (v) => {
   const s = v.trim();
-  if (/^"[\s\S]*"$|^'[\s\S]*'$/.test(s)) return s.slice(1, -1);
+  const quoted = /^(["'])([\s\S]*?)\1(?:\s+#.*)?$/.exec(s);
+  if (quoted) return quoted[2];
   return s.replace(/\s+#.*$/, '').trim();
 };
 /**

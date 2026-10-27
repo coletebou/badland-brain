@@ -108,6 +108,11 @@ describe('key and URL', () => {
     assert.equal(env.OTHER_SECRET, undefined); assert.equal(process.env.OTHER_SECRET, undefined);
     await writeFile(f, 'export BRAIN_KEY=abc123 # rotated\r\n');
     assert.deepEqual(await brain.brainKey(env), { key: 'abc123', source: 'key-file' });
+    // A quoted value ends at its closing quote, with an inline comment after it.
+    await writeFile(f, 'BRAIN_KEY="quoted-key" # the agent key\n');
+    assert.deepEqual(await brain.brainKey(env), { key: 'quoted-key', source: 'key-file' });
+    await writeFile(f, "export BRAIN_KEY='single-quoted'   # rotated\n");
+    assert.deepEqual(await brain.brainKey(env), { key: 'single-quoted', source: 'key-file' });
     await writeFile(f, '  a-bare-key-value  \n');
     assert.deepEqual(await brain.brainKey(env), { key: 'a-bare-key-value', source: 'key-file' });
     await writeFile(f, 'OTHER_KEY=not-the-brain-key\n');
