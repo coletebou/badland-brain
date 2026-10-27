@@ -340,6 +340,40 @@ describe('BrainStore', () => {
     expect(copy?.tags).not.toContain('standing');
   });
 
+  it('keeps an agent\'s correction of untrusted text untrusted, so it is never promoted', async () => {
+    const untrusted = { agent: 'importer:ops', originClass: 'untrusted' as const };
+    const clip = await store.note(untrusted, { title: 'Clipping', body: 'text someone else wrote', kind: 'doc', source: { system: 'clippings', externalId: 'web/launder' } });
+    const corrected = await store.supersede(actor, clip.entry.slug, { body: 'text someone else wrote, lightly edited', reason: 'tidy', expectedHash: clip.entry.contentHash });
+    expect(corrected).toMatchObject({ originClass: 'untrusted', authorAgent: actor.agent });
+    await expect(store.promote(corrected.slug, { standing: true })).rejects.toBeInstanceOf(BrainInputError);
+    const owner = { agent: 'owner', originClass: 'owner' as const };
+    expect((await store.supersede(owner, corrected.slug, { body: 'reviewed by the owner', reason: 'vouch', expectedHash: corrected.contentHash })).originClass).toBe('owner');
+  });
+
+  it('finds the curated copy of a long lineage, past any number of supersedes', async () => {
+    let current = (await store.note(actor, { title: 'Rule', body: 'version 0', kind: 'memory' })).entry;
+    const copy = await store.promote(current.slug, { standing: true });
+    for (let i = 1; i <= 22; i++) {
+      current = await store.supersede(actor, current.slug, { body: `version ${i}`, reason: 'revise', expectedHash: current.contentHash });
+    }
+    await store.promote(current.slug, { standing: true });
+    expect(await BrainEntry.countDocuments({ tier: 'curated', live: true })).toBe(1);
+    expect((await store.get(copy.slug))?.supersededBy).not.toBeNull();
+  });
+
+  it('a retried re-import repairs the index row of the version it retired, so the old text stops reading as current', async () => {
+    const source = { system: 'claude-memory', externalId: 'example/retry-retired.md' };
+    await store.note(actor, { title: 'Doc', body: 'the old text', kind: 'memory', source });
+    // The changed import retires the old version in Mongo, then fails on that version's index write.
+    vi.spyOn(index, 'upsertEntry').mockImplementationOnce(() => { throw new Error('sqlite busy'); });
+    await expect(store.note(actor, { title: 'Doc', body: 'the new text', kind: 'memory', source })).rejects.toThrow('sqlite busy');
+    expect(index.fts('"old"', { scopes: ['core'] }, 5)).toHaveLength(1);
+    const retry = await store.note(actor, { title: 'Doc', body: 'the new text', kind: 'memory', source });
+    expect(retry.created).toBe(false);
+    expect(index.fts('"old"', { scopes: ['core'] }, 5)).toHaveLength(0);
+    expect(index.fts('"new"', { scopes: ['core'] }, 5)).toHaveLength(1);
+  });
+
   it('never promotes an untrusted entry', async () => {
     const untrusted = { agent: 'importer:ops', originClass: 'untrusted' as const };
     const { entry } = await store.note(untrusted, { title: 'Clipping', body: 'text from an untrusted source', kind: 'doc' });

@@ -210,13 +210,13 @@ export class BrainStore {
    * by slug must not hide the live correction made from it, or an unchanged re-import would bring the original back
    * beside it.
    */
-  private async importedVersions(source: IBrainSource): Promise<{ imported: IBrainEntryDocument; head: IBrainEntryDocument | null; slugs: string[] } | null> {
+  private async importedVersions(source: IBrainSource): Promise<{ imported: IBrainEntryDocument; head: IBrainEntryDocument | null; versions: IBrainEntryDocument[]; slugs: string[] } | null> {
     const written = await BrainEntry.find({ 'source.system': source.system, 'source.externalId': source.externalId }).sort({ createdAt: -1 });
     if (written.length === 0) {
       return null;
     }
     const versions = [...written, ...await this.derived(written.map((doc) => doc.slug), ['supersede'])];
-    return { imported: written[0], head: versions.find((doc) => doc.live) ?? null, slugs: versions.map((doc) => doc.slug) };
+    return { imported: written[0], head: versions.find((doc) => doc.live) ?? null, versions, slugs: versions.map((doc) => doc.slug) };
   }
 
   /** The view of an entry; its successor is named only when the caller may see it. */
@@ -426,6 +426,13 @@ export class BrainStore {
       }
       const versions = await this.importedVersions(input.source);
       firstImport = versions === null;
+      // A retry after a re-import that failed part-way: a version Mongo already retired must not keep reading as
+      // current in the index.
+      for (const version of versions?.versions ?? []) {
+        if (!version.live) {
+          await this.ensureIndexed(version);
+        }
+      }
       retiredImport = versions && !versions.head ? versions.imported : null;
       // Demotion runs on every untrusted import, not only the first: a retry after a partial failure must still repair the copies.
       const demote = actor.originClass === 'untrusted';
@@ -609,7 +616,9 @@ export class BrainStore {
     }
     rejectSecrets('reason', reason);
     const clean = validateInput({ title: input.title ?? old.title, body: input.body, kind: old.kind, tags: input.tags ?? old.tags, namespace: old.namespace, importance: old.importance });
-    const next = await this.replace(old, actor, { title: clean.title, body: clean.body, tags: clean.tags, kind: old.kind, namespace: old.namespace, importance: old.importance, source: { system: 'supersede', externalId: old.slug, path: reason } });
+    // An agent's correction of untrusted text is still untrusted: its words came from outside, and only the owner vouches.
+    const writer = actor.originClass === 'agent' && old.originClass === 'untrusted' ? { ...actor, originClass: 'untrusted' as const } : actor;
+    const next = await this.replace(old, writer, { title: clean.title, body: clean.body, tags: clean.tags, kind: old.kind, namespace: old.namespace, importance: old.importance, source: { system: 'supersede', externalId: old.slug, path: reason } });
     return toView(next.entry, null);
   }
 
@@ -878,7 +887,7 @@ export class BrainStore {
   }
 
   /**
-   * The other versions of the lineage `doc` belongs to: its predecessors up the supersede chain (bounded, cycle-safe)
+   * The other versions of the lineage `doc` belongs to: its predecessors up the whole supersede chain (cycle-safe)
    * and, when that chain starts at an import, every version written under the import identity plus the corrections
    * made from them. A re-import carries the identity rather than `supersede/<slug>`, so the chain alone misses it.
    */
@@ -886,7 +895,7 @@ export class BrainStore {
     const slugs: string[] = [];
     const seen = new Set([doc.slug]);
     let cursor: IBrainEntryDocument | null = doc;
-    while (cursor?.source?.system === 'supersede' && slugs.length < 20) {
+    while (cursor?.source?.system === 'supersede') {
       const pred: string = cursor.source.externalId;
       if (seen.has(pred)) {
         break;

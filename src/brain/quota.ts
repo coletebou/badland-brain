@@ -1,5 +1,6 @@
 /**
- * An optional storage bound on the entries agent keys write: their notes and their corrections. Every version counts,
+ * An optional storage bound on the entries agent keys write: their notes and their corrections (an agent's correction of
+ * untrusted text keeps the untrusted origin, and counts too). Every version counts,
  * superseded and forgotten ones included: both stay stored as history, so forgetting cannot be used to cycle unbounded
  * storage. What the owner writes never counts, imports and promoted copies included, even when they carry the agent
  * origin.
@@ -12,8 +13,8 @@ export interface BrainWriteUsage { entries: number; bytes: number }
 
 export async function agentWriteUsage(): Promise<BrainWriteUsage> {
   const [row] = await BrainEntry.aggregate<BrainWriteUsage>([
-    // Of the entries with the agent origin, an agent key writes those with no source or a supersede one; imports carry their identity.
-    { $match: { originClass: 'agent', $or: [{ source: { $exists: false } }, { 'source.system': 'supersede' }] } },
+    // An agent key writes entries with no source (notes) or a supersede source (corrections); imports carry their identity.
+    { $match: { originClass: { $in: ['agent', 'untrusted'] }, $or: [{ source: { $exists: false } }, { 'source.system': 'supersede' }] } },
     { $group: { _id: null, entries: { $sum: 1 }, bytes: { $sum: { $add: [{ $strLenBytes: '$title' }, { $strLenBytes: '$body' }] } } } },
   ]);
   return { entries: row?.entries ?? 0, bytes: row?.bytes ?? 0 };
@@ -38,7 +39,8 @@ const bytesOf = (...parts: Array<string | undefined>): number => parts.reduce((s
 export function withAgentWriteQuota(store: BrainStore, quota: BrainWriteQuota): BrainStore {
   const limited = Object.create(store) as BrainStore;
   limited.note = async (actor, input, visibility) => {
-    if (actor.originClass === 'agent') {
+    // An import carries its source; only an agent key's own notes are bounded.
+    if (actor.originClass === 'agent' && !input.source) {
       await assertQuota(quota, bytesOf(input.title, input.body));
     }
     return store.note(actor, input, visibility);

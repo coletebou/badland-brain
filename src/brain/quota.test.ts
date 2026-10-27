@@ -42,6 +42,16 @@ describe('agent write quota', () => {
     await expect(limited.note(agent, { title: 'Over', body: 'one past the cap', kind: 'memory' })).rejects.toBeInstanceOf(BrainInputError);
   });
 
+  it('never refuses an import for the agent cap, and counts an agent\'s correction of untrusted text', async () => {
+    const limited = withAgentWriteQuota(store, { maxEntries: 1, maxBytes: 10_000 });
+    await limited.note(agent, { title: 'Agent', body: 'fills the one slot', kind: 'memory' });
+    const importer = { agent: 'importer:owner', originClass: 'agent' as const };
+    expect((await limited.note(importer, { title: 'Imported', body: 'an import past the cap', kind: 'memory', source: { system: 'claude-memory', externalId: 'repo/b.md' } })).created).toBe(true);
+    const untrusted = await store.note({ agent: 'importer:owner', originClass: 'untrusted' }, { title: 'Clip', body: 'clipped text', kind: 'doc', source: { system: 'clippings', externalId: 'c/1' } });
+    await store.supersede(agent, untrusted.entry.slug, { body: 'clipped text, tidied', reason: 'tidy', expectedHash: untrusted.entry.contentHash });
+    expect(await agentWriteUsage()).toMatchObject({ entries: 2 });
+  });
+
   it('bounds bytes as well as entries', async () => {
     const limited = withAgentWriteQuota(store, { maxEntries: 100, maxBytes: 40 });
     await limited.note(agent, { title: 'Short', body: 'twenty bytes of text', kind: 'memory' });
