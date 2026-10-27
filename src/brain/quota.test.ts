@@ -32,6 +32,16 @@ describe('agent write quota', () => {
     await expect(limited.note(agent, { title: 'Still full', body: 'history still counts', kind: 'memory' })).rejects.toThrow(/allows agents is full/u);
   });
 
+  it('counts only what agent keys write: imports and promoted copies with the agent origin do not', async () => {
+    const limited = withAgentWriteQuota(store, { maxEntries: 1, maxBytes: 10_000 });
+    const importer = { agent: 'importer:owner', originClass: 'agent' as const };
+    const imported = await store.note(importer, { title: 'Imported', body: 'imported with the agent origin', kind: 'memory', source: { system: 'claude-memory', externalId: 'repo/a.md' } });
+    await store.promote(imported.entry.slug, { standing: false });
+    expect(await agentWriteUsage()).toMatchObject({ entries: 0 });
+    expect((await limited.note(agent, { title: 'Agent', body: 'the one agent note the cap allows', kind: 'memory' })).created).toBe(true);
+    await expect(limited.note(agent, { title: 'Over', body: 'one past the cap', kind: 'memory' })).rejects.toBeInstanceOf(BrainInputError);
+  });
+
   it('bounds bytes as well as entries', async () => {
     const limited = withAgentWriteQuota(store, { maxEntries: 100, maxBytes: 40 });
     await limited.note(agent, { title: 'Short', body: 'twenty bytes of text', kind: 'memory' });

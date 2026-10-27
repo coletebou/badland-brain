@@ -1,7 +1,8 @@
 /**
- * An optional storage bound on the entries agents write. Every version an agent wrote counts, superseded and forgotten ones
- * included: both stay stored as history, so forgetting cannot be used to cycle unbounded storage. Owner and system
- * entries never count; imports that carry the agent origin do.
+ * An optional storage bound on the entries agent keys write: their notes and their corrections. Every version counts,
+ * superseded and forgotten ones included: both stay stored as history, so forgetting cannot be used to cycle unbounded
+ * storage. What the owner writes never counts, imports and promoted copies included, even when they carry the agent
+ * origin.
  */
 import { BrainEntry } from './model.js';
 import { BrainInputError, type BrainStore } from './store.js';
@@ -11,7 +12,8 @@ export interface BrainWriteUsage { entries: number; bytes: number }
 
 export async function agentWriteUsage(): Promise<BrainWriteUsage> {
   const [row] = await BrainEntry.aggregate<BrainWriteUsage>([
-    { $match: { originClass: 'agent' } },
+    // Of the entries with the agent origin, an agent key writes those with no source or a supersede one; imports carry their identity.
+    { $match: { originClass: 'agent', $or: [{ source: { $exists: false } }, { 'source.system': 'supersede' }] } },
     { $group: { _id: null, entries: { $sum: 1 }, bytes: { $sum: { $add: [{ $strLenBytes: '$title' }, { $strLenBytes: '$body' }] } } } },
   ]);
   return { entries: row?.entries ?? 0, bytes: row?.bytes ?? 0 };
