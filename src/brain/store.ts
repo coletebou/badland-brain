@@ -456,8 +456,17 @@ export class BrainStore {
               await this.ensureIndexed(imported);
             }
           } else {
-            // The source has not changed since it was imported, so an agent's later correction stays the current version.
-            await this.ensureIndexed(head);
+            // The source has not changed since it was imported, so the correction stays the
+            // current version. An agent's correction carries an untrusted re-import's downgrade, as the import's own row
+            // would (an agent's correction of untrusted text is untrusted), or a re-promotion would trust it again; an
+            // owner's correction is the owner vouching for that text, and stays the owner's.
+            if (demote && head.originClass === 'agent') {
+              head.originClass = 'untrusted';
+              await head.save();
+              await this.indexEntry(head);
+            } else {
+              await this.ensureIndexed(head);
+            }
             await this.recordCapture(imported, input.source);
           }
           if (demote) {

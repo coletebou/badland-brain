@@ -281,7 +281,9 @@ slug only, because one import identity can span namespaces.
 **The curated tier.** Only promotion (owner only) creates curated entries, and only owner writes
 change or retire them. When a source entry is forgotten, curated copies made from it gain the
 `needs-review` tag; when an import is re-imported as untrusted, its curated copies are demoted:
-origin `untrusted`, `standing` removed, `needs-review` added.
+origin `untrusted`, `standing` removed, `needs-review` added. An agent's correction that is the
+import's current version turns `untrusted` too, so promoting it again cannot restore a copy; an
+owner's correction stays the owner's.
 
 **Secret shapes.** Writes and searches are refused when any caller-supplied text (title, body, tags,
 reason, source metadata, the key's name, or a search query, which leaves the machine for the

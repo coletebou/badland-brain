@@ -543,6 +543,32 @@ describe('BrainStore', () => {
     expect(demoted?.tags).toContain('needs-review');
   });
 
+  it('an untrusted re-import downgrades an agent\'s live correction too, so re-promoting it cannot restore the copy', async () => {
+    const source = { system: 'clippings', externalId: 'web/20' };
+    const imported = await store.note(actor, { title: 'Clip', body: 'clip twenty', kind: 'doc', source });
+    const corrected = await store.supersede(actor, imported.entry.slug, { body: 'clip twenty, corrected', reason: 'fix', expectedHash: imported.entry.contentHash });
+    const copy = await store.promote(corrected.slug, { standing: true });
+    await store.note({ agent: 'importer:ops', originClass: 'untrusted' as const }, { title: 'Clip', body: 'clip twenty', kind: 'doc', source });
+    // The correction stays current, now carrying the source's downgrade, in Mongo and in the index.
+    expect(await BrainEntry.findOne({ slug: corrected.slug }).lean()).toMatchObject({ live: true, originClass: 'untrusted', authorAgent: actor.agent });
+    const rows = index.getChunks(index.fts('"corrected"', { scopes: ['core'], tier: 'episodic' }, 5).map((hit) => hit.chunkId));
+    expect(rows.map((row) => [row.slug, row.originClass])).toEqual([[corrected.slug, 'untrusted']]);
+    await expect(store.promote(corrected.slug, { standing: true })).rejects.toBeInstanceOf(BrainInputError);
+    const after = await BrainEntry.findOne({ slug: copy.slug }).lean();
+    expect(after?.originClass).toBe('untrusted');
+    expect(after?.tags).not.toContain('standing');
+    expect(after?.tags).toContain('needs-review');
+  });
+
+  it('an untrusted re-import leaves an owner\'s correction the owner\'s: the owner vouched for that text', async () => {
+    const source = { system: 'clippings', externalId: 'web/21' };
+    const imported = await store.note(actor, { title: 'Clip', body: 'clip twenty-one', kind: 'doc', source });
+    const owner = { agent: 'owner', originClass: 'owner' as const };
+    const vouched = await store.supersede(owner, imported.entry.slug, { body: 'clip twenty-one, reviewed', reason: 'vouch', expectedHash: imported.entry.contentHash });
+    await store.note({ agent: 'importer:ops', originClass: 'untrusted' as const }, { title: 'Clip', body: 'clip twenty-one', kind: 'doc', source });
+    expect(await BrainEntry.findOne({ slug: vouched.slug }).lean()).toMatchObject({ live: true, originClass: 'owner' });
+  });
+
   it('a first import whose body already exists keeps its identity as a retired version of that entry', async () => {
     const source = { system: 'clippings', externalId: 'web/15' };
     const own = await store.note(actor, { title: 'Own', body: 'a body two sources share', kind: 'memory' });

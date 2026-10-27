@@ -108,7 +108,9 @@ an unrelated entry an import was folded into is never treated as a version of it
 untrusted one) into the curated tier and can tag it `standing`. Curated copies follow their source's
 provenance: when a source is forgotten they gain `needs-review`; when it is re-imported as untrusted
 they are demoted (origin `untrusted`, `standing` removed, `needs-review` added), so text someone else
-wrote never keeps loading into sessions through a copy.
+wrote never keeps loading into sessions through a copy. An agent's correction that is the import's
+current version is downgraded with it, or a re-promotion would trust the copy again; an owner's
+correction stays the owner's, since the owner vouched for that text.
 
 ## The index
 
