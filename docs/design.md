@@ -98,8 +98,9 @@ leaves an unsearchable live entry for a retry to finish, never a searchable ghos
 **Imports** are idempotent on their identity (source system plus external id). An unchanged re-import
 refreshes metadata; a changed one supersedes the current version, whoever wrote it; an agent's
 correction of an imported item stays current until the source itself changes, even when the original
-it corrected was forgotten. An item too long for one entry travels as parts `<id>#part-<k>` that carry
-their count, and a re-import forgets the identities the item no longer has: parts past the new count,
+it corrected was forgotten. A re-import that matches the correction is recorded as the source's latest
+snapshot, so the source later changing back to its first text still counts as a change. An item too
+long for one entry travels as parts `<id>#part-<k>` that carry their count, and a re-import forgets the identities the item no longer has: parts past the new count,
 or the whole-item identity, or every part when the item fits again. Lineage is read from
 `source` alone: supersede copies name the slug they replaced and promotions the slug they copied, so
 an unrelated entry an import was folded into is never treated as a version of it.

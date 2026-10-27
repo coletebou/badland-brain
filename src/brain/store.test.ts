@@ -427,6 +427,41 @@ describe('BrainStore', () => {
     expect(index.fts('"4320"', { scopes: ['core'] }, 5)).toHaveLength(1);
   });
 
+  it('records a re-import that matches the current correction, so the source changing back replaces it', async () => {
+    const source = { system: 'claude-memory', externalId: 'example/preview.md' };
+    const imported = await store.note(actor, { title: 'Preview', body: 'the preview server is on 4300', kind: 'reference', source });
+    const corrected = await store.supersede(actor, imported.entry.slug, { body: 'the preview server is on 4310', reason: 'moved', expectedHash: imported.entry.contentHash });
+    // The source now says what the correction says: the correction stays current, and the same snapshot again writes nothing.
+    const snapshot = { title: 'Preview', body: 'the preview server is on 4310', kind: 'reference' as const, source };
+    expect(await store.note(actor, snapshot)).toMatchObject({ created: false, entry: { slug: corrected.slug } });
+    const rows = await BrainEntry.countDocuments();
+    expect(await store.note(actor, snapshot)).toMatchObject({ created: false, entry: { slug: corrected.slug } });
+    expect(await BrainEntry.countDocuments()).toBe(rows);
+    expect(await BrainEntry.countDocuments({ live: true })).toBe(1);
+    // The source changes back to the text first imported: a change since the last snapshot, so it replaces the correction.
+    const reverted = await store.note(actor, { title: 'Preview', body: 'the preview server is on 4300', kind: 'reference', source });
+    expect(reverted.created).toBe(true);
+    expect(reverted.entry.source).toMatchObject(source);
+    expect((await store.get(corrected.slug))?.supersededBy).toBe(reverted.entry.slug);
+    expect(await BrainEntry.countDocuments({ live: true })).toBe(1);
+    expect(index.fts('"4310"', { scopes: ['core'] }, 5)).toHaveLength(0);
+    expect(index.fts('"4300"', { scopes: ['core'] }, 5)).toHaveLength(1);
+    // The first import, the recorded snapshot, the correction and the revert all go with the source.
+    expect(await store.forget(actor, { source }, 'source withdrawn')).toEqual({ forgotten: 4 });
+  });
+
+  it('takes an import\'s latest snapshot by insertion order when two share a creation time', async () => {
+    const source = { system: 'claude-memory', externalId: 'example/tie.md' };
+    const imported = await store.note(actor, { title: 'Tie', body: 'the tie server is on 4400', kind: 'reference', source });
+    await store.supersede(actor, imported.entry.slug, { body: 'the tie server is on 4410', reason: 'moved', expectedHash: imported.entry.contentHash });
+    await store.note(actor, { title: 'Tie', body: 'the tie server is on 4410', kind: 'reference', source });
+    // The first import and the recorded snapshot, created in the same millisecond.
+    const first = await BrainEntry.findOne({ slug: imported.entry.slug }).lean();
+    await BrainEntry.collection.updateMany({ 'source.system': source.system, 'source.externalId': source.externalId }, { $set: { createdAt: first!.createdAt } });
+    const reverted = await store.note(actor, { title: 'Tie', body: 'the tie server is on 4400', kind: 'reference', source });
+    expect(reverted.created).toBe(true);
+  });
+
   it('forgetting by source retires the agent supersede that is the import\'s current version', async () => {
     const source = { system: 'clippings', externalId: 'web/9' };
     const imported = await store.note(actor, { title: 'Clip', body: 'clipped claim', kind: 'doc', source });

@@ -211,7 +211,7 @@ export class BrainStore {
    * beside it.
    */
   private async importedVersions(source: IBrainSource): Promise<{ imported: IBrainEntryDocument; head: IBrainEntryDocument | null; versions: IBrainEntryDocument[]; slugs: string[] } | null> {
-    const written = await BrainEntry.find({ 'source.system': source.system, 'source.externalId': source.externalId }).sort({ createdAt: -1 });
+    const written = await BrainEntry.find({ 'source.system': source.system, 'source.externalId': source.externalId }).sort({ createdAt: -1, _id: -1 });
     if (written.length === 0) {
       return null;
     }
@@ -456,7 +456,7 @@ export class BrainStore {
               await this.ensureIndexed(imported);
             }
           } else {
-            // The source has not changed since it was imported, so the correction stays the
+            // The source matches its last snapshot, or now says what the correction says, so the correction stays the
             // current version. An agent's correction carries an untrusted re-import's downgrade, as the import's own row
             // would (an agent's correction of untrusted text is untrusted), or a re-promotion would trust it again; an
             // owner's correction is the owner vouching for that text, and stays the owner's.
@@ -467,7 +467,13 @@ export class BrainStore {
             } else {
               await this.ensureIndexed(head);
             }
-            await this.recordCapture(imported, input.source);
+            if (imported.contentHash === contentHash) {
+              await this.recordCapture(imported, input.source);
+            } else {
+              // Record this snapshot as folded into the correction, so the next re-import compares against what the
+              // source last said: a change back to the text first imported then replaces the correction.
+              await this.recordFoldedImport(actor, input.source, clean, input, contentHash, head);
+            }
           }
           if (demote) {
             await this.demoteDependents(versions.slugs);
