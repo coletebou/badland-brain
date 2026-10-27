@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { KeyStore, mintKey } from '../auth/keys.js';
 import { createFakeEmbedder } from '../brain/embeddings/index.js';
@@ -185,6 +185,24 @@ describe('the HTTP app', () => {
     expect((await call(keys.owner.raw, 'POST', '/api/import', { originClass: 'system', items })).status).toBe(400);
     for (const forged of ['promote', 'supersede', 'Not A Slug']) {
       expect((await call(keys.owner.raw, 'POST', '/api/import', { originClass: 'owner', items }, { 'x-brain-source': forged })).status).toBe(400);
+    }
+  });
+
+  it('counts only a concurrent import of the same item as skipped; any other duplicate key is reported', async () => {
+    const duplicate = (keyPattern: Record<string, number>) => Object.assign(new Error('E11000 duplicate key error'), { code: 11000, keyPattern });
+    const note = vi.spyOn(runtime.store, 'note')
+      .mockRejectedValueOnce(duplicate({ 'source.system': 1, 'source.externalId': 1 }))
+      .mockRejectedValueOnce(duplicate({ namespace: 1, contentHash: 1 }));
+    try {
+      const items = [
+        { externalId: 'dup/1', title: 'One', body: 'raced by another import of the same item', kind: 'memory' },
+        { externalId: 'dup/2', title: 'Two', body: 'collides on a different index', kind: 'memory' },
+      ];
+      expect(await data(await call(keys.owner.raw, 'POST', '/api/import', { originClass: 'owner', items }))).toEqual({
+        created: 0, skipped: 1, retired: 0, rejected: [{ externalId: 'dup/2', error: 'duplicate key on namespace, contentHash' }],
+      });
+    } finally {
+      note.mockRestore();
     }
   });
 

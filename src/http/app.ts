@@ -228,7 +228,10 @@ export function createApp(deps: AppDeps): express.Express {
         });
         summary[created ? 'created' : 'skipped'] += 1;
       } catch (error) {
-        if ((error as { code?: number }).code === 11000) { summary.skipped += 1; continue; }
+        // Only a concurrent import of the same item collides on its identity, and that other request wrote it. Any other
+        // duplicate key is a write that did not happen, so it is reported, never counted as skipped.
+        const { code, keyPattern } = error as { code?: number; keyPattern?: Record<string, number> };
+        if (code === 11000 && keyPattern !== undefined && 'source.externalId' in keyPattern) { summary.skipped += 1; continue; }
         summary.rejected.push({ externalId: item.externalId, error: reasonOf(error) });
         continue;
       }

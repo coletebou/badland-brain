@@ -1297,6 +1297,20 @@ describe('BrainStore', () => {
     expect((await store.get(twin.entry.slug))?.history.map((h) => h.slug)).toEqual([b.entry.slug, older.slug, a.entry.slug]);
   });
 
+  it('folds a re-import that moves an item into a namespace already holding its body into that entry', async () => {
+    const source = { system: 'claude-memory', externalId: 'example/move.md' };
+    const imported = await store.note(actor, { title: 'Move', body: 'text both namespaces hold', kind: 'memory', source });
+    const twin = await store.note(actor, { title: 'Repo note', body: 'text both namespaces hold', kind: 'memory', namespace: 'repo:web' });
+    const item = { title: 'Move', body: 'text both namespaces hold', kind: 'memory' as const, namespace: 'repo:web', source };
+    expect(await store.note(actor, item)).toMatchObject({ created: false, entry: { slug: twin.entry.slug, namespace: 'repo:web' } });
+    expect(await store.get(imported.entry.slug)).toMatchObject({ supersededBy: twin.entry.slug });
+    expect(await BrainEntry.countDocuments({ live: true })).toBe(1);
+    // The same snapshot again is recognized and writes nothing.
+    const rows = await BrainEntry.countDocuments();
+    expect(await store.note(actor, item)).toMatchObject({ created: false, entry: { slug: twin.entry.slug } });
+    expect(await BrainEntry.countDocuments()).toBe(rows);
+  });
+
   it('windows long bodies on get', async () => {
     const body = 'x'.repeat(9000);
     const { entry } = await store.note(actor, { title: 'Long', body, kind: 'doc' });

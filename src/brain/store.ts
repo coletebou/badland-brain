@@ -448,6 +448,16 @@ export class BrainStore {
         }
         if (imported.contentHash === contentHash || head.contentHash === contentHash) {
           if (head._id.equals(imported._id)) {
+            if (clean.namespace !== imported.namespace
+              && await BrainEntry.exists({ contentHash, namespace: clean.namespace, live: true, tier: 'episodic', forgotten: { $exists: false } })) {
+              // It moves into a namespace that already holds this body: fold into that entry, as a changed import
+              // would, instead of colliding with it on the per-namespace body index.
+              const moved = await this.replace(imported, actor, { title: clean.title, body: clean.body, tags: clean.tags, kind: input.kind, namespace: clean.namespace, importance: clean.importance, source: input.source });
+              if (demote) {
+                await this.demoteDependents(versions.slugs);
+              }
+              return { entry: await this.viewOf(moved.entry, visibility), created: moved.created };
+            }
             // Same body, but a re-import may still move governed metadata (title, tags, kind, namespace, importance, origin, path).
             if (this.refreshMetadata(imported, actor, input.kind, clean, input.source)) {
               await imported.save();
