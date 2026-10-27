@@ -51,5 +51,8 @@ export function withAgentWriteQuota(store: BrainStore, quota: BrainWriteQuota): 
     }
     return store.supersede(actor, slug, input, visibility);
   };
+  // The writes above run on `store` itself, so a reindex swap made through the wrapper must re-point that store too, or
+  // its writes and the wrapper's reads would use different indexes.
+  limited.setIndex = (index) => store.setIndex(index);
   return limited;
 }

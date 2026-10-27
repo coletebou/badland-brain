@@ -52,6 +52,19 @@ describe('agent write quota', () => {
     expect(await agentWriteUsage()).toMatchObject({ entries: 2 });
   });
 
+  it('shares one index with the store across a swap made through either', async () => {
+    const limited = withAgentWriteQuota(store, { maxEntries: 10, maxBytes: 10_000 });
+    const swapped = openBrainIndex({ path: ':memory:', identity: testIdentity(config) });
+    limited.setIndex(swapped);
+    await limited.note(agent, { title: 'After', body: 'written after a swap through the wrapper', kind: 'memory' });
+    expect(swapped.counts()).toEqual({ entries: 1, chunks: 1 });
+    const again = openBrainIndex({ path: ':memory:', identity: testIdentity(config) });
+    store.setIndex(again);
+    await limited.note(agent, { title: 'Again', body: 'written after a swap through the store', kind: 'memory' });
+    expect(again.counts()).toEqual({ entries: 1, chunks: 1 });
+    expect(swapped.counts()).toEqual({ entries: 1, chunks: 1 });
+  });
+
   it('bounds bytes as well as entries', async () => {
     const limited = withAgentWriteQuota(store, { maxEntries: 100, maxBytes: 40 });
     await limited.note(agent, { title: 'Short', body: 'twenty bytes of text', kind: 'memory' });
