@@ -24,6 +24,14 @@ describe('findSecretShapes', () => {
     expect(findSecretShapes(`token eyJ${'a'.repeat(10)}.${'b'.repeat(10)}.${'c'.repeat(10)}`)).toEqual(['jwt']);
   });
 
+  it('catches temporary AWS credentials as well as long-term access keys', () => {
+    for (const prefix of ['AS', 'AB', 'AC']) {
+      const id = `${prefix}${prefix === 'AC' ? 'CA' : 'IA'}${'Q'.repeat(16)}`;
+      expect(findSecretShapes(`"AccessKeyId": "${id}"`)).toEqual(['aws-access-key']);
+    }
+    expect(findSecretShapes(`ASIA${'Q'.repeat(15)}`)).toEqual([]);
+  });
+
   it('catches GitHub, GitLab, npm, Stripe and Slack tokens', () => {
     expect(findSecretShapes(`ghp_${'k'.repeat(24)}`)).toEqual(['github-token']);
     expect(findSecretShapes(`glpat-${'k'.repeat(20)}`)).toEqual(['gitlab-token']);

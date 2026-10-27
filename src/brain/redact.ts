@@ -11,7 +11,8 @@ export const SECRET_PATTERNS: ReadonlyArray<{ name: string; pattern: RegExp }> =
   { name: 'npm-token', pattern: /\bnpm_[A-Za-z0-9]{36}\b/u },
   { name: 'stripe-key', pattern: /\b(?:sk|rk)_live_[A-Za-z0-9]{20,}/u },
   { name: 'slack-token', pattern: /\bxox[abprs]-[A-Za-z0-9-]{10,}/u },
-  { name: 'aws-access-key', pattern: /\bAKIA[0-9A-Z]{16}\b/u },
+  // Long-term (AKIA) and temporary STS (ASIA) access key ids, and the STS bearer-token and context-specific credential ids.
+  { name: 'aws-access-key', pattern: /\b(?:AKIA|ASIA|ABIA|ACCA)[0-9A-Z]{16}\b/u },
   { name: 'google-api-key', pattern: /\bAIza[0-9A-Za-z_-]{35}(?![A-Za-z0-9_-])/u },
   { name: 'jwt', pattern: /(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/u },
   { name: 'bearer-token', pattern: /\bBearer\s+[A-Za-z0-9._~+/=-]{16,}/iu },
