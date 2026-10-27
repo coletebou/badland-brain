@@ -59,7 +59,7 @@ a tool error comes back as the server's own sentence with its code, and HTTP fai
 The plugin serves Drover's remote search kind `brain`: when a Drover search includes it, the plugin
 sends the query (cut to 300 characters) to `brain_search`, asks for at most 10 hits, and maps each to
 Drover's hit fields (`title`, `snippet`, `ts`, `slug`, `namespace`, `tier`, `author`, `role`,
-`score`). Drover fuses them with its own index's hits by rank. When Drover stops waiting, the request
+`score`), plus `origin`, the entry's origin class, so a client can weigh how far to trust it. Drover fuses them with its own index's hits by rank. When Drover stops waiting, the request
 to the brain is stopped too; one caller giving up never fails another caller waiting on the same
 session start.
 

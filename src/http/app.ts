@@ -205,6 +205,8 @@ export function createApp(deps: AppDeps): express.Express {
   });
 
   // ---------------------------------------------------------------- owner-only operations
+  // An owner key is never confined to namespaces (the key-record schema in auth/keys.ts refuses one), so these routes
+  // act on the whole brain by design.
   /** Bulk import: the one path that may set origin, so owner keys only. */
   app.post('/api/import', owner, perRequest, express.json({ limit: IMPORT_BODY_LIMIT_BYTES }), async (req, res) => {
     const args = parse(brainImportSchema, req.body, res);

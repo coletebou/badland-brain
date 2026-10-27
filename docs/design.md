@@ -252,7 +252,9 @@ requests and writes are rate-limited per key.
   the write by pattern name, never echoing the value. An oversized import is checked whole before it
   is split, since a cut could separate a key's halves or a private key from its header.
 - `originClass` is derived, never accepted from input. Untrusted entries are searchable with their
-  label but never promoted and never part of `brain_context`.
+  label but never promoted and never part of `brain_context`, and an agent's correction of one stays
+  untrusted: only the owner vouches for outside text.
+- The SQLite index holds verbatim chunks: its file is created 0600, its directory 0700 when created.
 - Forgetting records its reason and actor; forgotten entries leave the index at once and are skipped
   by every read and rebuild.
 - Logs carry tool names, key names, outcomes, durations and argument names, never values.

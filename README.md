@@ -196,7 +196,7 @@ standing-facts block, and a confined key lives entirely inside its own.
 (written by an agent key), `untrusted` (imported text someone else wrote), or `system` (reserved).
 Imports set the class per request, which is why only the owner key may import. Untrusted
 entries stay searchable, with their label, but are never promoted and never load into
-`brain_context`.
+`brain_context`; an agent's correction of an untrusted entry stays untrusted.
 
 **Search** runs two legs over the scope a query allows: BM25 over FTS5 (title weighted 4, tags 2,
 text 1) and a vector KNN over sqlite-vec, 80 candidates each. Reciprocal rank fusion (k = 60)
@@ -305,7 +305,8 @@ the configured embedding provider; with `BRAIN_EMBED_PROVIDER=fake` nothing leav
 are JSON lines on stderr: for each tool call its name, the key's name, the outcome, the duration and
 the *names* of its arguments; for a refused key the path and the reason. Key values, entry bodies and
 search queries are never logged. Search keeps a recall row per hit (the query's hash, never its text,
-with the key's name, the entry and its rank).
+with the key's name, the entry and its rank). The SQLite index holds verbatim chunks, so its file is
+created 0600, in a 0700 directory when the brain creates one.
 
 **Network.** The server binds `127.0.0.1` by default and does not terminate TLS. To reach it from
 other machines, put an HTTPS proxy in front of it. See [SECURITY.md](SECURITY.md) to report a
